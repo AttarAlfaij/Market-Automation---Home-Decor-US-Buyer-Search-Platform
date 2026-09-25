@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Marketing Automation</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+  <div class="layout">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-brand"><span>&#9889;</span> MarketAuto</div>
+      <nav class="sidebar-nav">
+        <a href="#dashboard" data-page="dashboard">
+          <span class="icon">&#9632;</span> Dashboard
+        </a>
+        <a href="#buyers" data-page="buyers">
+          <span class="icon">&#9823;</span> Buyers
+        </a>
+        <a href="#campaigns" data-page="campaigns">
+          <span class="icon">&#9993;</span> Campaigns
+        </a>
+        <a href="#tracking" data-page="tracking">
+          <span class="icon">&#9201;</span> Email Tracking
+        </a>
+      </nav>
+    </aside>
+
+    <div class="main">
+      <header class="header">
+        <div class="header-left">
+          <button class="menu-toggle" id="menuToggle">&#9776;</button>
+          <h1 class="header-title">
+            <span id="pageIcon">&#9632;</span>
+            <span id="pageTitle">Dashboard</span>
+          </h1>
+        </div>
+        <div class="api-status">
+          <span class="status-dot" id="statusDot"></span>
+          <span id="statusLabel">Checking...</span>
+        </div>
+      </header>
+
+      <div class="content" id="pageContent"></div>
+    </div>
+  </div>
+
+  <script src="js/utils.js?v=3"></script>
+  <script src="js/api.js?v=3"></script>
+  <script src="js/dashboard.js?v=3"></script>
+  <script src="js/buyers.js?v=3"></script>
+  <script src="js/buyer-search.js?v=3"></script>
+  <script src="js/campaigns.js?v=5"></script>
+  <script src="js/tracking.js?v=3"></script>
+  <script src="js/app.js?v=3"></script>
+  <script>App.init();</script>
+</body>
+</html>

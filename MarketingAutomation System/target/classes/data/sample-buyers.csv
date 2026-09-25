@@ -1,0 +1,15 @@
+buyerName,companyName,email,website,country,sourcePlatform,sourceUrl,businessType,productName
+John Smith,ABC Imports,john@abcimports.com,https://abcimports.com,USA,GOOGLE,https://google.com/search?q=singing+bowls+importer,IMPORTER,Singing Bowls
+Maria Garcia,Sound Wellness Trading,maria@soundwellness.es,https://soundwellness.es,Spain,TRADE_PORTAL,https://tradeportals.com/sellers,WHOLESALER,Singing Bowls
+Akira Tanaka,Harmony Imports Co.,akira@harmonyimports.jp,https://harmonyimports.jp,Japan,LINKEDIN,https://linkedin.com/company/harmony-imports,DISTRIBUTOR,Singing Bowls
+Sarah Johnson,London Wellness Supply,sarah@londonwellness.co.uk,https://londonwellness.co.uk,UK,MANUAL,,RETAILER,Singing Bowls
+Hans Mueller,Freude Handel GmbH,hans@freudehandel.de,https://freudehandel.de,Germany,BUSINESS_DIRECTORY,https://yellowpages.de/freudehandel,IMPORTER,Singing Bowls
+Priya Sharma,Shanti Exports,priya@shantiexports.in,https://shantiexports.in,India,TRADE_PORTAL,https://indiamart.com/shantiexports,WHOLESALER,Singing Bowls
+Jean-Pierre Dubois,Relaxation Pro,jpdubois@relaxationpro.fr,https://relaxationpro.fr,France,LINKEDIN,https://linkedin.com/in/jpdubois,RETAILER,Singing Bowls
+Lee Min-Jun,Seoul Sound Trading,lee@seoulsound.kr,https://seoulsound.kr,South Korea,GOOGLE,https://google.com/search?q=singing+bowls+korea,DISTRIBUTOR,Singing Bowls
+Carlos Rodriguez,Armonia Comercial,carlos@armoniacomercial.mx,https://armoniacomercial.mx,Mexico,CSV_IMPORT,https://tradefair.com/armonia,IMPORTER,Singing Bowls
+Emma Wilson,Wellness Down Under,emma@wellnessdownunder.com.au,https://wellnessdownunder.com.au,Australia,COMPANY_WEBSITE,,RETAILER,Singing Bowls
+invalid-email-record,Bad Data Corp,,https://badd.com,USA,MANUAL,,IMPORTER,Singing Bowls
+Missing Company,emma@wellnessdownunder.com.au,USA,GOOGLE,IMPORTER,Singing Bowls
+Sarah Lee,Duplicate Co,duplicate@test.com,https://dup.com,UK,MANUAL,,WHOLESALER,Singing Bowls
+Sarah Lee,Duplicate Co 2,duplicate@test.com,https://dup2.com,UK,MANUAL,,WHOLESALER,Singing Bowls
