@@ -60,33 +60,64 @@ public final class RelatedBuyerCategories {
             "yoga teachers"
     );
 
-    // Decorated / decorative jars (with a handle): the gift, craft and floral
-    // trades that resell them as display vessels.
+    // Decorated / decorative jars (with a handle): the home-decor, gift, craft
+    // and tabletop trades that resell them as display vessels, followed by the
+    // gifting/floral trades. ORDER IS SEARCH PRIORITY, and the planner caps the
+    // added queries (MAX_RELATED_BUYER_CATEGORY_QUERIES), so the trades that
+    // genuinely stock handled decorative jars lead: home decor, gift and
+    // handicraft retail, then the ceramic / pottery / tableware studios, then
+    // the wholesale / import / distribution / retail channels of the same trade.
+    //
+    // The trade-qualified channel words ("home decor wholesalers", "home decor
+    // importers", ...) are deliberately used instead of the bare role words:
+    // the planner already fires a bare "wholesaler" / "importer" / "retailer"
+    // query for the requested city, and only the trade-qualified form is a
+    // DIFFERENT query that reaches a genuine local business website.
     private static final List<String> DECORATIVE_JAR_CATEGORIES = List.of(
             "home decor stores",
+            "home decor wholesalers",
             "gift shops",
             "handicraft stores",
+            "pottery stores",
+            "ceramic stores",
             "interior decor stores",
+            "tableware stores",
+            "home decor importers",
+            "home decor distributors",
+            "home decor retailers",
+            "gift and craft shops",
+            "apothecary shops",
             "lifestyle stores",
-            "garden decor stores",
             "floral shops",
-            "wedding event decor companies",
-            "boutique retailers"
+            "boutique retailers",
+            "garden decor stores"
     );
 
-    // Lanterns: outdoor/patio, hospitality and event decor buyers.
+    // Lanterns: the lighting trade first, then home decor, antiques and the
+    // furniture/interior trades, then the architectural-lighting supply and
+    // import channels, then the outdoor/patio, hospitality and event-decor
+    // buyers. Same priority rule as the jars: the first entries are what the
+    // capped added-query budget actually fires.
     private static final List<String> LANTERN_CATEGORIES = List.of(
+            "lighting stores",
             "home decor stores",
+            "lighting wholesalers",
+            "antique stores",
+            "furniture stores",
+            "interior decor stores",
+            "architectural lighting suppliers",
+            "lighting suppliers",
+            "lighting importers",
+            "lighting distributors",
+            "lighting retailers",
+            "lighting showrooms",
             "garden decor stores",
             "outdoor living stores",
             "patio stores",
-            "lighting retailers",
-            "furniture stores",
-            "interior decor stores",
             "gift shops",
+            "event decor companies",
             "hotels",
-            "restaurants",
-            "event decor companies"
+            "restaurants"
     );
 
     // Candles: home-fragrance, gifting, hospitality and event buyers.
@@ -153,8 +184,12 @@ public final class RelatedBuyerCategories {
         put("decorative jar", DECORATIVE_JAR_CATEGORIES);
         put("decorated jar", DECORATIVE_JAR_CATEGORIES);
         put("jar with handle", DECORATIVE_JAR_CATEGORIES);
+        put("jar with handles", DECORATIVE_JAR_CATEGORIES);
         put("decorated jar with handle", DECORATIVE_JAR_CATEGORIES);
+        put("decorated jar with handles", DECORATIVE_JAR_CATEGORIES);
         put("decorative jar with handle", DECORATIVE_JAR_CATEGORIES);
+        put("decorative jar with handles", DECORATIVE_JAR_CATEGORIES);
+        put("decorated jar with a handle", DECORATIVE_JAR_CATEGORIES);
         put("decorative glass jar", DECORATIVE_JAR_CATEGORIES);
         put("glass jar", DECORATIVE_JAR_CATEGORIES);
         put("apothecary jar", DECORATIVE_JAR_CATEGORIES);
@@ -170,6 +205,12 @@ public final class RelatedBuyerCategories {
         put("hanging lantern", LANTERN_CATEGORIES);
         put("garden lantern", LANTERN_CATEGORIES);
         put("wall lantern", LANTERN_CATEGORIES);
+        put("wall mounted lantern", LANTERN_CATEGORIES);
+        put("outdoor wall lantern", LANTERN_CATEGORIES);
+        put("exterior wall lantern", LANTERN_CATEGORIES);
+        put("wall sconce lantern", LANTERN_CATEGORIES);
+        put("lantern wall sconce", LANTERN_CATEGORIES);
+        put("antique wall lantern", LANTERN_CATEGORIES);
         put("lantern holder", LANTERN_CATEGORIES);
 
         // ---- Candles ----

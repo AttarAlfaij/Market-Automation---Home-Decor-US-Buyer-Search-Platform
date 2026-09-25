@@ -204,6 +204,220 @@ public class FirecrawlBuyerSearchService {
         "San Francisco", "Boston", "Phoenix", "Toronto", "Vancouver", "Montreal"
     );
 
+    // ------------------------------------------------------------------
+    // NEARBY CITIES. Two cities of the SAME state belong to the same regional
+    // CLUSTER when they sit in one connected market - a shared metro area, a
+    // single freight/highway corridor, or one coast - and are a genuinely
+    // reachable local buyer. A buyer in a clustered city is ranked ahead of a
+    // buyer at the far end of the same state, and the same-state widening phase
+    // spends its requests on the clustered (nearby) cities BEFORE the rest of
+    // the state, so a city search returns as many genuinely local buyers as
+    // possible instead of generic product pages from far away.
+    //
+    // Deliberate properties:
+    //   * every cluster lists only cities that are already in
+    //     REGION_MAJOR_CITIES for that state - the map widens the ordering, it
+    //     never introduces a city the search did not already know;
+    //   * a state with no cluster simply never yields a NEARBY_CITY result and
+    //     keeps its existing SAME_STATE ranking - the fallback is the old
+    //     behaviour, never a rejection;
+    //   * cities inside one cluster are each other's neighbours (membership is
+    //     symmetric), so "nearby" needs no direction.
+    // ------------------------------------------------------------------
+    private static final Map<String, List<List<String>>> NEARBY_CITY_CLUSTERS =
+        Map.ofEntries(
+        // Alabama
+        Map.entry("alabama", List.of(
+                List.of("Birmingham", "Montgomery"),
+                List.of("Mobile"))),
+        // Alaska / Hawaii / the Dakotas have no second major city in range.
+        Map.entry("arizona", List.of(
+                List.of("Phoenix", "Mesa", "Tucson"))),
+        Map.entry("arkansas", List.of(
+                List.of("Little Rock", "Fort Smith", "Fayetteville"))),
+        // California: the LA basin + San Diego, the Bay Area, the Central Valley.
+        Map.entry("california", List.of(
+                List.of("Los Angeles", "Riverside", "Long Beach", "Anaheim", "San Diego"),
+                List.of("San Jose", "San Francisco", "Oakland"),
+                List.of("Sacramento", "Stockton"),
+                List.of("Fresno", "Bakersfield"))),
+        Map.entry("colorado", List.of(
+                List.of("Denver", "Boulder"),
+                List.of("Colorado Springs"))),
+        Map.entry("connecticut", List.of(
+                List.of("Hartford", "New Haven", "Stamford"))),
+        Map.entry("delaware", List.of(
+                List.of("Wilmington", "Newark", "Dover"))),
+        // Florida: South Florida, the I-4 Tampa/Orlando corridor, NE Florida.
+        Map.entry("florida", List.of(
+                List.of("Miami", "Hialeah", "Fort Lauderdale", "West Palm Beach"),
+                List.of("Orlando", "Tampa", "St. Petersburg"),
+                List.of("Jacksonville", "Gainesville"),
+                List.of("Tallahassee"),
+                List.of("Naples"))),
+        Map.entry("georgia", List.of(
+                List.of("Atlanta", "Augusta"),
+                List.of("Savannah"))),
+        Map.entry("hawaii", List.of(
+                List.of("Hilo", "Kailua"),
+                List.of("Honolulu"))),
+        Map.entry("idaho", List.of(
+                List.of("Boise", "Meridian"),
+                List.of("Idaho Falls"))),
+        Map.entry("illinois", List.of(
+                List.of("Chicago", "Rockford"),
+                List.of("Springfield"))),
+        Map.entry("indiana", List.of(
+                List.of("Indianapolis", "Fort Wayne"),
+                List.of("Evansville"))),
+        Map.entry("iowa", List.of(
+                List.of("Des Moines", "Cedar Rapids"),
+                List.of("Cedar Rapids", "Davenport"))),
+        Map.entry("kansas", List.of(
+                List.of("Wichita", "Topeka"),
+                List.of("Kansas City"))),
+        Map.entry("kentucky", List.of(
+                List.of("Louisville", "Lexington"),
+                List.of("Bowling Green"))),
+        // Louisiana: the I-10 / Acadiana corridor.
+        Map.entry("louisiana", List.of(
+                List.of("New Orleans", "Baton Rouge", "Lafayette"),
+                List.of("Shreveport"))),
+        Map.entry("maine", List.of(
+                List.of("Portland", "Bangor", "Lewiston"))),
+        Map.entry("maryland", List.of(
+                List.of("Baltimore", "Annapolis", "Rockville"))),
+        Map.entry("massachusetts", List.of(
+                List.of("Boston", "Worcester", "Springfield"))),
+        Map.entry("michigan", List.of(
+                List.of("Detroit", "Ann Arbor"),
+                List.of("Grand Rapids"))),
+        Map.entry("minnesota", List.of(
+                List.of("Minneapolis", "Saint Paul"),
+                List.of("Duluth"))),
+        Map.entry("mississippi", List.of(
+                List.of("Jackson", "Gulfport", "Biloxi"))),
+        Map.entry("missouri", List.of(
+                List.of("St. Louis", "Springfield"),
+                List.of("Kansas City"))),
+        Map.entry("nebraska", List.of(
+                List.of("Omaha", "Lincoln"),
+                List.of("Grand Island"))),
+        Map.entry("nevada", List.of(
+                List.of("Las Vegas", "Henderson"),
+                List.of("Reno"))),
+        Map.entry("new hampshire", List.of(
+                List.of("Manchester", "Nashua", "Concord"))),
+        Map.entry("new jersey", List.of(
+                List.of("Newark", "Jersey City", "Paterson"))),
+        Map.entry("new mexico", List.of(
+                List.of("Albuquerque", "Santa Fe", "Las Cruces"))),
+        // New York: the NYC metro, the I-90 upstate corridor, the capital region.
+        Map.entry("new york", List.of(
+                List.of("New York", "Yonkers", "White Plains", "Schenectady"),
+                List.of("Buffalo", "Rochester", "Syracuse"),
+                List.of("Albany"))),
+        Map.entry("north carolina", List.of(
+                List.of("Charlotte", "Raleigh", "Greensboro"))),
+        Map.entry("north dakota", List.of(
+                List.of("Fargo", "Grand Forks"),
+                List.of("Bismarck"))),
+        Map.entry("ohio", List.of(
+                List.of("Columbus", "Toledo", "Cleveland"),
+                List.of("Cincinnati"))),
+        Map.entry("oklahoma", List.of(
+                List.of("Oklahoma City", "Norman", "Tulsa"))),
+        Map.entry("oregon", List.of(
+                List.of("Portland", "Eugene", "Salem"))),
+        Map.entry("pennsylvania", List.of(
+                List.of("Philadelphia", "Allentown"),
+                List.of("Pittsburgh"))),
+        Map.entry("rhode island", List.of(
+                List.of("Providence", "Warwick", "Cranston"))),
+        Map.entry("south carolina", List.of(
+                List.of("Columbia", "Charleston", "Greenville"))),
+        Map.entry("south dakota", List.of(
+                List.of("Sioux Falls", "Aberdeen"),
+                List.of("Rapid City"))),
+        Map.entry("tennessee", List.of(
+                List.of("Nashville", "Knoxville", "Memphis"))),
+        // Texas: the central/southeast corridor that links San Antonio, Austin,
+        // the Gulf Coast and Houston into ONE distribution market (this is why
+        // "Corpus Christi -> Houston -> Austin -> San Antonio" is a genuinely
+        // local widening, not a jump across the state); then DFW, the
+        // Panhandle, West Texas and the Rio Grande Valley.
+        Map.entry("texas", List.of(
+                List.of("Houston", "Corpus Christi", "Austin", "San Antonio",
+                        "Beaumont", "Victoria", "New Braunfels", "Round Rock",
+                        "Conroe", "Sugar Land", "Pearland", "League City",
+                        "Pasadena", "Killeen", "Temple"),
+                List.of("Dallas", "Fort Worth", "Arlington", "Plano", "Garland",
+                        "Irving", "McKinney", "Frisco", "Denton", "Richardson",
+                        "Carrollton", "Grand Prairie", "Lewisville", "Tyler",
+                        "Longview"),
+                List.of("Amarillo", "Lubbock"),
+                List.of("El Paso", "Midland", "Odessa", "Abilene"),
+                List.of("McAllen", "Edinburg", "Mission", "Pharr", "Brownsville",
+                        "Laredo"))),
+        Map.entry("utah", List.of(
+                List.of("Salt Lake City", "Ogden", "Provo"))),
+        Map.entry("vermont", List.of(
+                List.of("Burlington", "South Burlington", "Montpelier"))),
+        // Virginia: Hampton Roads and the Richmond/DC corridor.
+        Map.entry("virginia", List.of(
+                List.of("Virginia Beach", "Norfolk"),
+                List.of("Richmond", "Arlington"))),
+        Map.entry("washington", List.of(
+                List.of("Seattle", "Tacoma"),
+                List.of("Spokane"))),
+        Map.entry("west virginia", List.of(
+                List.of("Charleston", "Huntington"),
+                List.of("Morgantown"))),
+        Map.entry("wisconsin", List.of(
+                List.of("Milwaukee", "Madison", "Green Bay"))),
+        Map.entry("wyoming", List.of(
+                List.of("Cheyenne", "Laramie"),
+                List.of("Casper"))),
+        Map.entry("district of columbia", List.of(
+                List.of("Washington"))),
+        // ---- Canada ----
+        Map.entry("alberta", List.of(
+                List.of("Edmonton", "St. Albert"),
+                List.of("Calgary", "Lethbridge"),
+                List.of("Red Deer", "Medicine Hat"))),
+        Map.entry("british columbia", List.of(
+                List.of("Vancouver", "Surrey", "Richmond", "Burnaby", "Nanaimo"),
+                List.of("Victoria"))),
+        Map.entry("manitoba", List.of(
+                List.of("Winnipeg", "Steinbach", "Brandon"))),
+        Map.entry("new brunswick", List.of(
+                List.of("Moncton", "Saint John", "Fredericton"))),
+        Map.entry("newfoundland and labrador", List.of(
+                List.of("St. John's", "Mount Pearl"),
+                List.of("Corner Brook"))),
+        Map.entry("nova scotia", List.of(
+                List.of("Halifax", "Dartmouth"),
+                List.of("Sydney"))),
+        Map.entry("ontario", List.of(
+                List.of("Toronto", "Mississauga", "Brampton", "Oshawa", "Guelph"),
+                List.of("Hamilton", "Kitchener", "London", "Windsor"),
+                List.of("Ottawa"),
+                List.of("Thunder Bay"))),
+        Map.entry("prince edward island", List.of(
+                List.of("Charlottetown", "Summerside", "Stratford"))),
+        Map.entry("quebec", List.of(
+                List.of("Montreal", "Laval"),
+                List.of("Quebec City"))),
+        Map.entry("saskatchewan", List.of(
+                List.of("Saskatoon", "Prince Albert"),
+                List.of("Regina"))),
+        Map.entry("northwest territories", List.of(
+                List.of("Yellowknife", "Hay River"),
+                List.of("Inuvik"))),
+        Map.entry("yukon", List.of(
+                List.of("Whitehorse")))
+    );
+
     // When this fraction of a strategy's raw results are already-known
     // businesses (existing DB rows / returned earlier in this search) and none
     // are new, the remaining same-location-form strategies are skipped: keep
@@ -803,8 +1017,15 @@ public class FirecrawlBuyerSearchService {
     private static final String CODE_ALREADY_IN_DATABASE = "ALREADY IN DATABASE";
 
     // Location-priority classes used for final selection/ranking. Location
-    // metadata never controls whether a product-relevant candidate is accepted.
+    // metadata never controls whether a product-relevant candidate is accepted,
+    // but it DOES control the ORDER: the requested city first, then a NEARBY
+    // city of the requested city inside the SAME state, then the rest of that
+    // state, then the same country.
     private static final String LOCATION_CLASS_EXACT_CITY = "EXACT_CITY";
+    // A city in the SAME state that sits in the same regional cluster as the
+    // requested city (NEARBY_CITY_CLUSTERS) - a genuinely reachable local
+    // buyer, ranked ahead of the far end of the same state.
+    private static final String LOCATION_CLASS_NEARBY_CITY = "NEARBY_CITY";
     private static final String LOCATION_CLASS_SAME_STATE = "SAME_STATE";
     private static final String LOCATION_CLASS_SAME_COUNTRY = "SAME_COUNTRY";
     private static final String LOCATION_CLASS_UNKNOWN = "UNKNOWN";
@@ -6659,6 +6880,14 @@ public class FirecrawlBuyerSearchService {
      * OTHER cities of the SAME state before it goes state-wide, so a city+state
      * search is never broadened straight to the whole country. Returns an empty
      * list when the state has no known city pool.
+     *
+     * <p>NEARBY-FIRST: the cities that share a regional cluster with one of the
+     * cities the user requested come first, then the rest of the state. Within
+     * each group the state's own importance order is preserved, so a Corpus
+     * Christi search widens Houston -&gt; Austin -&gt; San Antonio (all in the
+     * same central/southeast Texas market) before it ever considers Dallas or
+     * El Paso. Every existing city is still returned in the same relative
+     * order - only the NEARBY ones are promoted.
      */
     private List<String> otherCitiesInState(String state, Set<String> excludeCities) {
         List<String> out = new ArrayList<>();
