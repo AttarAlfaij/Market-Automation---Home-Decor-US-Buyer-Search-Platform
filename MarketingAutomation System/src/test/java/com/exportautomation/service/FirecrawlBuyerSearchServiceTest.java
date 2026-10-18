@@ -1398,6 +1398,43 @@ class FirecrawlBuyerSearchServiceTest {
     }
 
     @Test
+    void magazineBookNewsAndAuctionHostsAreRejectedAsNonBuyerPages() throws Exception {
+        Object svc = newService();
+        // magazines (fashion / lifestyle / food) never buy a physical product
+        assertNotNull(preFilterReason(svc, "https://www.vogue.com/article/best-singing-bowls",
+                "The 10 Best Singing Bowls", "Our editors tested these singing bowls"),
+                "a magazine host must be rejected by host identity");
+        assertNotNull(preFilterReason(svc, "https://www.bonappetit.com/story/singing-bowls",
+                "Styling with Singing Bowls", "The latest food news"),
+                "a food magazine host must be rejected by host identity");
+        // book retailers / publishers / reading platforms
+        assertNotNull(preFilterReason(svc, "https://www.goodreads.com/book/show/123-singing-bowls",
+                "Singing Bowls: A Guide", "Buy the book"),
+                "a book platform host must be rejected by host identity");
+        assertNotNull(preFilterReason(svc, "https://www.barnesandnoble.com/w/singing-bowls/123",
+                "Singing Bowls (paperback)", "Add to cart, buy the book"),
+                "a book retailer host must be rejected by host identity");
+        // global news outlets
+        assertNotNull(preFilterReason(svc, "https://www.aljazeera.com/news/2026/singing-bowls",
+                "Singing bowls in the news", "Breaking news and analysis"),
+                "a global news host must be rejected by host identity");
+        assertNotNull(preFilterReason(svc, "https://www.spiegel.de/gesundheit/singing-bowls",
+                "Singing bowls im Trend", "Aktuelle Nachrichten"),
+                "a foreign news host must be rejected by host identity");
+        // auction houses / online auction platforms
+        assertNotNull(preFilterReason(svc, "https://www.sothebys.com/en/auction/singing-bowls",
+                "Auction of Rare Singing Bowls", "Register to bid"),
+                "an auction house host must be rejected by host identity");
+        assertNotNull(preFilterReason(svc, "https://www.liveauctioneers.com/item/singing-bowls",
+                "Singing Bowls - Lot 42", "Place your bid"),
+                "an online auction host must be rejected by host identity");
+        // a shop whose NAME merely contains 'book' is not a book platform
+        assertNull(preFilterReason(svc, "https://booknookdecor.example/collections/singing-bowls",
+                "Book Nook Decor & Gift Shop", "Wholesale home decor and singing bowls"),
+                "a home decor store whose name contains 'book' must never be dropped");
+    }
+
+    @Test
     void realDecorStoresSurviveTheHospitalTravelAndNewsRules() throws Exception {
         Object svc = newService();
         // The new rules must not cost a single real buyer.
@@ -1630,22 +1667,24 @@ class FirecrawlBuyerSearchServiceTest {
 
     @Test
     void singingBowlsMapsToItsRelatedIndustryAndUseCaseCategories() {
-        assertEquals(List.of("yoga studios", "meditation centers", "wellness centers",
-                        "sound healing practitioners", "sound therapy centers", "spiritual shops",
-                        "buddhist stores", "holistic wellness stores", "spas", "retreat centers",
-                        "yoga teachers"),
+        assertEquals(List.of("sound therapy centers", "sound therapy practitioners",
+                        "sound therapy studios", "sound healing practitioners",
+                        "sound healing centers", "sound bath practitioners",
+                        "meditation centers", "yoga studios", "wellness centers",
+                        "spiritual shops", "buddhist stores"),
                 relatedCategories("singing bowls"),
-                "singing bowls must expand to the wellness / therapy / retail buyer categories");
+                "singing bowls must expand to the sound-therapy / wellness buyer categories");
     }
 
     @Test
     void everyDocumentedProductMapsToItsOwnRelatedCategoryList() {
         // All six product groups the mapping has to cover, each resolved from the
         // normalized product name (no product name is hardcoded in the planner).
-        assertEquals(List.of("yoga studios", "meditation centers", "wellness centers",
-                        "sound healing practitioners", "sound therapy centers", "spiritual shops",
-                        "buddhist stores", "holistic wellness stores", "spas", "retreat centers",
-                        "yoga teachers"),
+        assertEquals(List.of("sound therapy centers", "sound therapy practitioners",
+                        "sound therapy studios", "sound healing practitioners",
+                        "sound healing centers", "sound bath practitioners",
+                        "meditation centers", "yoga studios", "wellness centers",
+                        "spiritual shops", "buddhist stores"),
                 relatedCategories("singing bowls"));
         assertTrue(relatedCategories("decorated jars with handle").contains("floral shops"),
                 "decorated jars with handle must map to the jar buyer categories");
@@ -1711,18 +1750,18 @@ class FirecrawlBuyerSearchServiceTest {
         List<?> entries = relatedEntries(svc, List.of("singing bowls"), List.of(), "Texas", "USA");
         List<String> queries = entryQueries(svc, entries);
 
-        assertEquals(11, entries.size(), "every singing-bowl related category must be searched");
-        assertEquals(List.of("\"singing bowls\" \"yoga studios\" Texas",
-                        "\"singing bowls\" \"meditation centers\" Texas",
-                        "\"singing bowls\" \"wellness centers\" Texas",
+        assertEquals(11, entries.size(), "the added queries must fill the related-category cap");
+        assertEquals(List.of("\"singing bowls\" \"sound therapy centers\" Texas",
+                        "\"singing bowls\" \"sound therapy practitioners\" Texas",
+                        "\"singing bowls\" \"sound therapy studios\" Texas",
                         "\"singing bowls\" \"sound healing practitioners\" Texas",
-                        "\"singing bowls\" \"sound therapy centers\" Texas",
+                        "\"singing bowls\" \"sound healing centers\" Texas",
+                        "\"singing bowls\" \"sound bath practitioners\" Texas",
+                        "\"singing bowls\" \"meditation centers\" Texas",
+                        "\"singing bowls\" \"yoga studios\" Texas",
+                        "\"singing bowls\" \"wellness centers\" Texas",
                         "\"singing bowls\" \"spiritual shops\" Texas",
-                        "\"singing bowls\" \"buddhist stores\" Texas",
-                        "\"singing bowls\" \"holistic wellness stores\" Texas",
-                        "\"singing bowls\" \"spas\" Texas",
-                        "\"singing bowls\" \"retreat centers\" Texas",
-                        "\"singing bowls\" \"yoga teachers\" Texas"),
+                        "\"singing bowls\" \"buddhist stores\" Texas"),
                 queries,
                 "each related query is the USER'S product plus one category plus the requested state");
     }

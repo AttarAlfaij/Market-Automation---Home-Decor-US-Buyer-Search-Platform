@@ -2,6 +2,7 @@ package com.exportautomation.controller;
 
 import com.exportautomation.dto.ApiResponse;
 import com.exportautomation.dto.BulkCampaignResponse;
+import com.exportautomation.dto.BulkDeleteRecipientsRequest;
 import com.exportautomation.dto.CampaignRecipient;
 import com.exportautomation.dto.SendCampaignRequest;
 import com.exportautomation.entity.Campaign;
@@ -9,6 +10,7 @@ import com.exportautomation.service.CampaignService;
 import com.exportautomation.service.EmailService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.validation.ConstraintViolation;
+import jakarta.validation.Valid;
 import jakarta.validation.Validator;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -126,6 +128,14 @@ public class CampaignController {
             @PathVariable Long buyerId) {
         emailService.removeRecipientFromCampaign(campaignId, buyerId);
         return ResponseEntity.ok(ApiResponse.success("Buyer deleted from campaign successfully", null));
+    }
+
+    @DeleteMapping("/{campaignId}/recipients/bulk")
+    public ResponseEntity<ApiResponse> deleteRecipientsBulk(
+            @PathVariable Long campaignId,
+            @Valid @RequestBody BulkDeleteRecipientsRequest request) {
+        Map<String, Object> result = emailService.removeRecipientsFromCampaign(campaignId, request.getBuyerIds());
+        return ResponseEntity.ok(ApiResponse.success("Buyers deleted from campaign successfully", result));
     }
 
     private Campaign parseAndValidateCampaign(String campaignJson) {

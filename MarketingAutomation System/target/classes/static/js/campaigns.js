@@ -6,6 +6,8 @@ const Campaigns = (() => {
   let currentCampaign = null;
   let currentRecipients = [];
   let removedRecipientIds = new Set();
+  let selectedRecipientIds = new Set();
+  let bulkDeleteInProgress = false;
   let sendPollTimer = null;
 
   const EMAIL_RE = /^[A-Za-z0-9+_.\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$/;
@@ -162,6 +164,7 @@ const Campaigns = (() => {
       const c = await API.getCampaign(id);
       currentCampaign = c;
       removedRecipientIds = new Set();
+      selectedRecipientIds = new Set();
       renderDetail(c);
 
       try {
@@ -262,6 +265,8 @@ const Campaigns = (() => {
             <button class="btn btn-secondary" id="removeEmptyEmailBtn">&#10005; Remove Empty Email Buyers</button>
             <button class="btn btn-danger" id="removeContactedBtn">&#128465; Remove All Contacted Buyers</button>
             <button class="btn btn-danger" id="removeAllRecipientsBtn">&#10005; Remove All</button>
+            <span class="selection-count" id="selectionCount">0 buyers selected</span>
+            <button class="btn btn-danger" id="deleteSelectedBtn" disabled>&#128465; Delete Selected</button>
           </div>
           <span class="recipients-hint">Edit or remove recipients before sending. Nothing is sent until you click &quot;Send Campaign&quot;.</span>
         </div>
@@ -287,6 +292,7 @@ const Campaigns = (() => {
     document.getElementById("removeEmptyEmailBtn").addEventListener("click", () => removeEmptyEmailBuyers());
     document.getElementById("removeContactedBtn").addEventListener("click", () => removeContactedBuyers());
     document.getElementById("removeAllRecipientsBtn").addEventListener("click", () => removeAllRecipients());
+    document.getElementById("deleteSelectedBtn").addEventListener("click", deleteSelectedRecipients);
 
     renderRecipients();
   }
@@ -336,6 +342,12 @@ const Campaigns = (() => {
     const countEl = document.getElementById("recipientCount");
     if (countEl) countEl.textContent = list.length;
 
+    const displayedIds = new Set(list.map((r) => r.buyerId));
+    selectedRecipientIds.forEach((id) => {
+      if (!displayedIds.has(id)) selectedRecipientIds.delete(id);
+    });
+    updateBulkSelectionUI();
+
     if (list.length === 0) {
       wrap.innerHTML = `
         <div class="state-message">
@@ -358,6 +370,9 @@ const Campaigns = (() => {
         <table>
           <thead>
             <tr>
+              <th class="recipient-select-col">
+                <input type="checkbox" id="selectAllRecipients" title="Select all buyers" />
+              </th>
               <th>Buyer</th>
               <th>Company</th>
               <th>Country</th>
@@ -370,6 +385,10 @@ const Campaigns = (() => {
           <tbody>
             ${ordered.map((r) => `
               <tr data-buyer-id="${r.buyerId}">
+                <td class="recipient-select-col">
+                  <input type="checkbox" class="recipient-checkbox" data-id="${r.buyerId}"
+                         ${selectedRecipientIds.has(r.buyerId) ? "checked" : ""} title="Select ${escapeHtml(r.buyerName || "buyer")}" />
+                </td>
                 <td>${escapeHtml(r.buyerName || "-")}</td>
                 <td>${escapeHtml(r.companyName || "-")}</td>
                 <td>${escapeHtml(r.country || "-")}</td>
@@ -395,6 +414,21 @@ const Campaigns = (() => {
     wrap.querySelectorAll(".btn-save-recipient").forEach((btn) => {
       btn.addEventListener("click", () => saveRecipientEmail(parseInt(btn.dataset.id)));
     });
+    const selectAllBox = document.getElementById("selectAllRecipients");
+    if (selectAllBox) {
+      selectAllBox.addEventListener("change", () => toggleSelectAll(selectAllBox.checked));
+    }
+    wrap.querySelectorAll(".recipient-checkbox").forEach((box) => {
+      box.addEventListener("change", () => {
+        const id = Number(box.dataset.id);
+        if (box.checked) {
+          selectedRecipientIds.add(id);
+        } else {
+          selectedRecipientIds.delete(id);
+        }
+        updateBulkSelectionUI();
+      });
+    });
     wrap.querySelectorAll(".btn-remove-recipient").forEach((btn) => {
       btn.addEventListener("click", () => removeRecipient(parseInt(btn.dataset.id)));
     });
@@ -409,6 +443,87 @@ const Campaigns = (() => {
         }
       });
     });
+    updateBulkSelectionUI();
+  }
+
+  function updateBulkSelectionUI() {
+    const displayedIds = activeRecipients().map((r) => r.buyerId);
+    const selectedDisplayed = displayedIds.filter((id) => selectedRecipientIds.has(id)).length;
+
+    const countEl = document.getElementById("selectionCount");
+    if (countEl) {
+      countEl.textContent = `${selectedRecipientIds.size} buyer${selectedRecipientIds.size === 1 ? "" : "s"} selected`;
+    }
+
+    const deleteBtn = document.getElementById("deleteSelectedBtn");
+    if (deleteBtn) {
+      deleteBtn.disabled = bulkDeleteInProgress || selectedRecipientIds.size === 0;
+    }
+
+    const selectAllBox = document.getElementById("selectAllRecipients");
+    if (selectAllBox) {
+      selectAllBox.disabled = displayedIds.length === 0;
+      selectAllBox.checked = displayedIds.length > 0 && selectedDisplayed === displayedIds.length;
+      selectAllBox.indeterminate = selectedDisplayed > 0 && selectedDisplayed < displayedIds.length;
+    }
+  }
+
+  function toggleSelectAll(checked) {
+    const list = activeRecipients();
+    if (checked) {
+      list.forEach((r) => selectedRecipientIds.add(r.buyerId));
+    } else {
+      list.forEach((r) => selectedRecipientIds.delete(r.buyerId));
+    }
+    const wrap = document.getElementById("recipientsWrap");
+    if (wrap) {
+      wrap.querySelectorAll(".recipient-checkbox").forEach((box) => { box.checked = checked; });
+    }
+    updateBulkSelectionUI();
+  }
+
+  async function deleteSelectedRecipients() {
+    if (bulkDeleteInProgress) return;
+
+    const ids = [...selectedRecipientIds];
+    if (ids.length === 0) {
+      showToast("No buyers selected. Select at least one buyer to delete.", "error");
+      return;
+    }
+    const label = `selected buyer${ids.length === 1 ? "" : "s"}`;
+    if (!confirm(`Are you sure you want to delete ${ids.length} ${label}?`)) return;
+
+    bulkDeleteInProgress = true;
+    const deleteBtn = document.getElementById("deleteSelectedBtn");
+    if (deleteBtn) {
+      deleteBtn.disabled = true;
+      deleteBtn.textContent = "Deleting...";
+    }
+
+    let deleted = false;
+    try {
+      await API.deleteRecipients(currentCampaign.id, ids);
+      const removed = new Set(ids);
+      currentRecipients = currentRecipients.filter((x) => !removed.has(x.buyerId));
+      selectedRecipientIds = new Set();
+      deleted = true;
+      showToast(`${ids.length} ${label} deleted from this campaign`, "success");
+    } catch (err) {
+      showToast("Error deleting selected buyers: " + err.message, "error");
+    } finally {
+      bulkDeleteInProgress = false;
+      if (deleteBtn) deleteBtn.innerHTML = "&#128465; Delete Selected";
+    }
+
+    if (deleted) {
+      try {
+        currentRecipients = await API.getCampaignRecipients(currentCampaign.id);
+        currentRecipients.forEach((r) => { r.savedEmail = r.email || ""; });
+      } catch (recErr) {
+        showToast("Could not refresh recipients: " + recErr.message, "error");
+      }
+    }
+    renderRecipients();
   }
 
   function setRecipientError(buyerId, msg) {
@@ -584,6 +699,16 @@ const Campaigns = (() => {
           </div>
           <div class="form-row">
             <div class="form-group">
+              <label>City</label>
+              <input type="text" id="ar-city" placeholder="e.g. Austin">
+            </div>
+            <div class="form-group">
+              <label>State</label>
+              <input type="text" id="ar-state" placeholder="e.g. Texas">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
               <label>Product Name <span class="required">*</span></label>
               <input type="text" id="ar-productName" value="${escapeHtml(currentCampaign.productName || "")}" placeholder="e.g. Organic Ceylon Cinnamon">
               <span class="error-msg" id="err-ar-productName"></span>
@@ -628,6 +753,8 @@ const Campaigns = (() => {
       companyName: document.getElementById("ar-companyName").value.trim(),
       email: document.getElementById("ar-email").value.trim().toLowerCase(),
       country: document.getElementById("ar-country").value.trim(),
+      city: document.getElementById("ar-city").value.trim(),
+      state: document.getElementById("ar-state").value.trim(),
       productName: document.getElementById("ar-productName").value.trim(),
       sourceUrl: document.getElementById("ar-sourceUrl").value.trim(),
     };

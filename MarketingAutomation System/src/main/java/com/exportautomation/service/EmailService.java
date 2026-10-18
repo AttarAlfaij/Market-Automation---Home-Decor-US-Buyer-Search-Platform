@@ -29,11 +29,15 @@ import org.springframework.stereotype.Service;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -212,6 +216,7 @@ public class EmailService {
             String rootCause = getRootCauseMessage(e);
             logger.error("Failed to send test email to {} — SMTP root cause: {}", request.getRecipientEmail(), rootCause, e);
             emailLog.setStatus("FAILED");
+            emailLog.setSentAt(LocalDateTime.now());
             emailLog.setErrorMessage("SMTP error: " + rootCause);
             emailLogRepository.save(emailLog);
             throw new RuntimeException("Failed to send email (SMTP error): " + rootCause, e);
@@ -219,6 +224,7 @@ public class EmailService {
             String rootCause = getRootCauseMessage(e);
             logger.error("Unexpected error sending test email to {} — root cause: {}", request.getRecipientEmail(), rootCause, e);
             emailLog.setStatus("FAILED");
+            emailLog.setSentAt(LocalDateTime.now());
             emailLog.setErrorMessage("Error: " + rootCause);
             emailLogRepository.save(emailLog);
             throw new RuntimeException("Failed to send email: " + rootCause, e);
@@ -312,6 +318,7 @@ public class EmailService {
             String rootCause = getRootCauseMessage(e);
             logger.error("Failed to send email to {} — SMTP root cause: {}", buyer.getEmail(), rootCause, e);
             emailLog.setStatus("FAILED");
+            emailLog.setSentAt(LocalDateTime.now());
             emailLog.setErrorMessage("SMTP error: " + rootCause);
             emailLogRepository.save(emailLog);
             throw new RuntimeException("Failed to send email (SMTP error): " + rootCause, e);
@@ -319,6 +326,7 @@ public class EmailService {
             String rootCause = getRootCauseMessage(e);
             logger.error("Unexpected error sending email to {} — root cause: {}", buyer.getEmail(), rootCause, e);
             emailLog.setStatus("FAILED");
+            emailLog.setSentAt(LocalDateTime.now());
             emailLog.setErrorMessage("Error: " + rootCause);
             emailLogRepository.save(emailLog);
             throw new RuntimeException("Failed to send email: " + rootCause, e);
@@ -513,6 +521,7 @@ public class EmailService {
                     logger.error("[Campaign {}] FAILED buyerId={} email=\"{}\" attempt={}/{} SMTP root cause: \"{}\"",
                             campaignId, buyer.getId(), buyer.getEmail(), attemptNumber, eligibleBuyers.size(), rootCause, e);
                     emailLog.setStatus("FAILED");
+                    emailLog.setSentAt(LocalDateTime.now());
                     emailLog.setErrorMessage("SMTP error: " + rootCause);
                     emailLogRepository.save(emailLog);
 
@@ -569,8 +578,11 @@ public class EmailService {
             r.setSourceUrl(b.getSourceUrl());
             r.setSourcePlatform(b.getSourcePlatform());
             r.setEmailStatus(b.getEmailStatus());
+            // A buyer emailed through ANY campaign is shown as SENT in every
+            // campaign, so a status reflects the mail's true state globally
+            // instead of only inside the campaign that sent it.
             r.setAlreadySent(b.getEmail() != null && !b.getEmail().isBlank()
-                    && emailLogRepository.existsByBuyerIdAndCampaignIdAndStatus(b.getId(), campaign.getId(), "SENT"));
+                    && emailLogRepository.existsByBuyerIdAndStatus(b.getId(), "SENT"));
             recipients.add(r);
         }
         logger.info("[Campaign {}] Retrieved {} recipients for review", campaignId, recipients.size());
@@ -626,6 +638,59 @@ public class EmailService {
         }
         logger.info("[Campaign {}] Buyer id={} permanently removed from this campaign's recipient list",
                 campaignId, buyerId);
+    }
+
+    // Permanently removes the given buyers from THIS campaign's recipient list only.
+    // The buyer rows, their email logs and their relationships with other campaigns
+    // are untouched - each selected buyer is turned into a campaign exclusion.
+    public Map<String, Object> removeRecipientsFromCampaign(Long campaignId, List<Long> buyerIds) {
+        if (buyerIds == null || buyerIds.isEmpty()) {
+            throw new IllegalArgumentException("No buyers selected for deletion");
+        }
+
+        Set<Long> uniqueBuyerIds = new LinkedHashSet<>();
+        for (Long buyerId : buyerIds) {
+            if (buyerId == null) {
+                throw new IllegalArgumentException("buyerIds must not contain null values");
+            }
+            uniqueBuyerIds.add(buyerId);
+        }
+
+        campaignRepository.findById(campaignId)
+                .orElseThrow(() -> new ResourceNotFoundException("Campaign not found with id: " + campaignId));
+
+        Set<Long> existingBuyerIds = new HashSet<>();
+        for (Long buyerId : uniqueBuyerIds) {
+            if (buyerRepository.findById(buyerId).isPresent()) {
+                existingBuyerIds.add(buyerId);
+            }
+        }
+        for (Long buyerId : uniqueBuyerIds) {
+            if (!existingBuyerIds.contains(buyerId)) {
+                throw new ResourceNotFoundException("Buyer not found with id: " + buyerId);
+            }
+        }
+
+        Set<Long> alreadyExcluded = new HashSet<>(
+                exclusionRepository.findBuyerIdsByCampaignIdAndBuyerIdIn(campaignId, uniqueBuyerIds));
+        List<CampaignRecipientExclusion> newExclusions = new ArrayList<>();
+        for (Long buyerId : uniqueBuyerIds) {
+            if (!alreadyExcluded.contains(buyerId)) {
+                newExclusions.add(new CampaignRecipientExclusion(campaignId, buyerId));
+            }
+        }
+        if (!newExclusions.isEmpty()) {
+            exclusionRepository.saveAll(newExclusions);
+        }
+
+        logger.info("[Campaign {}] BULK DELETE: {}/{} selected buyer(s) permanently removed from this campaign's recipient list",
+                campaignId, uniqueBuyerIds.size(), buyerIds.size());
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("campaignId", campaignId);
+        result.put("deleted", uniqueBuyerIds.size());
+        result.put("buyerIds", new ArrayList<>(uniqueBuyerIds));
+        return result;
     }
 
     public BulkCampaignResponse startCampaignSend(Long campaignId, SendCampaignRequest request) {
@@ -686,11 +751,103 @@ public class EmailService {
     }
 
     public Map<String, Object> getTrackingStats() {
+        return getTrackingStats(null, null);
+    }
+
+    /**
+     * Email tracking stats, optionally bounded by a date range on the actual
+     * email send timestamp (email_logs.sent_at). When no dates are given the
+     * response falls back to all-time counts, preserving the original keys
+     * ("sent", "pending", "responses") for existing consumers.
+     */
+    public Map<String, Object> getTrackingStats(LocalDate startDate, LocalDate endDate) {
+        if ((startDate == null) != (endDate == null)) {
+            throw new IllegalArgumentException("Both startDate and endDate are required for date filtering.");
+        }
+
+        long successful;
+        long failed;
+        if (startDate != null) {
+            if (startDate.isAfter(endDate)) {
+                throw new IllegalArgumentException("Start date must be on or before end date.");
+            }
+            LocalDateTime rangeStart = startDate.atStartOfDay();
+            LocalDateTime rangeEnd = endDate.plusDays(1).atStartOfDay();
+            successful = emailLogRepository.countSentAtBetweenAndStatus(rangeStart, rangeEnd, "SENT");
+            failed = emailLogRepository.countSentAtBetweenAndStatus(rangeStart, rangeEnd, "FAILED");
+        } else {
+            successful = emailLogRepository.countByStatus("SENT");
+            failed = emailLogRepository.countByStatus("FAILED");
+        }
+
+        long pending = buyerRepository.countPendingContactable();
+
         Map<String, Object> stats = new HashMap<>();
-        stats.put("sent", emailLogRepository.countByStatus("SENT"));
-        stats.put("pending", buyerRepository.countPendingContactable());
+        stats.put("total", successful + failed);
+        stats.put("successful", successful);
+        stats.put("failed", failed);
+        stats.put("pending", pending);
+        if (startDate != null) {
+            stats.put("startDate", startDate.toString());
+            stats.put("endDate", endDate.toString());
+        }
+        stats.put("sent", successful);
         stats.put("responses", responseRepository.countAllResponses());
         return stats;
+    }
+
+    /**
+     * Email summary for the Email Tracking "Email Summary" view: the total
+     * number of logged emails plus their status breakdown (SENT, FAILED, ...).
+     * With no dates the summary covers all time. The same email_logs.sent_at
+     * timestamp and inclusive day boundaries are used as getTrackingStats, so
+     * a summary and the tracking stats always agree for an identical range.
+     */
+    public Map<String, Object> getEmailSummary(LocalDate startDate, LocalDate endDate) {
+        if ((startDate == null) != (endDate == null)) {
+            throw new IllegalArgumentException("Both startDate and endDate are required for date filtering.");
+        }
+        if (startDate != null && startDate.isAfter(endDate)) {
+            throw new IllegalArgumentException("Start date must be on or before end date.");
+        }
+
+        List<EmailLogRepository.StatusCountRow> rows;
+        if (startDate != null) {
+            LocalDateTime rangeStart = startDate.atStartOfDay();
+            LocalDateTime rangeEnd = endDate.plusDays(1).atStartOfDay();
+            rows = emailLogRepository.countGroupedByStatusBetween(rangeStart, rangeEnd);
+        } else {
+            rows = emailLogRepository.countGroupedByStatus();
+        }
+
+        Map<String, Long> countsByStatus = new LinkedHashMap<>();
+        long total = 0;
+        for (EmailLogRepository.StatusCountRow row : rows) {
+            String status = row.getStatus() == null || row.getStatus().isBlank()
+                    ? "UNKNOWN"
+                    : row.getStatus().trim().toUpperCase(Locale.ROOT);
+            countsByStatus.merge(status, row.getCnt(), Long::sum);
+            total += row.getCnt();
+        }
+
+        List<Map<String, Object>> statusCounts = new ArrayList<>();
+        for (Map.Entry<String, Long> entry : countsByStatus.entrySet()) {
+            long count = entry.getValue();
+            Map<String, Object> item = new HashMap<>();
+            item.put("status", entry.getKey());
+            item.put("count", count);
+            item.put("percentage", total > 0 ? Math.round((count * 100.0) / total) : 0L);
+            statusCounts.add(item);
+        }
+
+        Map<String, Object> summary = new HashMap<>();
+        summary.put("startDate", startDate != null ? startDate.toString() : null);
+        summary.put("endDate", endDate != null ? endDate.toString() : null);
+        summary.put("total", total);
+        summary.put("successful", countsByStatus.getOrDefault("SENT", 0L));
+        summary.put("failed", countsByStatus.getOrDefault("FAILED", 0L));
+        summary.put("statusCounts", statusCounts);
+        return summary;
     }
 
     public static class SendJob {
@@ -835,6 +992,7 @@ public class EmailService {
                     logger.error("[Campaign {}] FAILED buyerId={} email={} SMTP root cause: {}",
                             campaignId, buyer.getId(), item.getEmail(), rootCause, e);
                     emailLog.setStatus("FAILED");
+                    emailLog.setSentAt(LocalDateTime.now());
                     emailLog.setErrorMessage("SMTP error: " + rootCause);
                     emailLogRepository.save(emailLog);
 

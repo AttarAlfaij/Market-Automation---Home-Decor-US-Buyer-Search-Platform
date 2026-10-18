@@ -6,10 +6,11 @@ import com.exportautomation.dto.TestEmailRequest;
 import com.exportautomation.service.EmailService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpStatus;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.Map;
 
 @RestController
@@ -33,8 +34,23 @@ public class EmailController {
     }
 
     @GetMapping("/tracking-stats")
-    public ResponseEntity<ApiResponse> getTrackingStats() {
-        Map<String, Object> stats = emailService.getTrackingStats();
+    public ResponseEntity<ApiResponse> getTrackingStats(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+        Map<String, Object> stats = emailService.getTrackingStats(startDate, endDate);
         return ResponseEntity.ok(ApiResponse.success("Tracking stats retrieved successfully", stats));
+    }
+
+    /**
+     * Sent-email summary for an optional inclusive date range (yyyy-MM-dd).
+     * Returns the total number of logged emails and the breakdown per status
+     * (SENT, FAILED, ...) used by the Email Tracking summary donut chart.
+     */
+    @GetMapping("/summary")
+    public ResponseEntity<ApiResponse> getEmailSummary(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+        Map<String, Object> summary = emailService.getEmailSummary(startDate, endDate);
+        return ResponseEntity.ok(ApiResponse.success("Email summary retrieved successfully", summary));
     }
 }

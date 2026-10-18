@@ -4,6 +4,7 @@ C:\Users\alfai\Downloads\MarketingAutomation System serp api\MarketingAutomation
 C:\Users\alfai\Downloads\MarketingAutomation System serp api\MarketingAutomation System\src\main\java\com\exportautomation\entity\Buyer.java
 C:\Users\alfai\Downloads\MarketingAutomation System serp api\MarketingAutomation System\src\main\java\com\exportautomation\dto\BulkCampaignResponse.java
 C:\Users\alfai\Downloads\MarketingAutomation System serp api\MarketingAutomation System\src\main\java\com\exportautomation\dto\ClassifyBuyerResponse.java
+C:\Users\alfai\Downloads\MarketingAutomation System serp api\MarketingAutomation System\src\main\java\com\exportautomation\dto\BulkDeleteRecipientsRequest.java
 C:\Users\alfai\Downloads\MarketingAutomation System serp api\MarketingAutomation System\src\main\java\com\exportautomation\controller\EmailController.java
 C:\Users\alfai\Downloads\MarketingAutomation System serp api\MarketingAutomation System\src\main\java\com\exportautomation\controller\LeadController.java
 C:\Users\alfai\Downloads\MarketingAutomation System serp api\MarketingAutomation System\src\main\java\com\exportautomation\dto\CampaignRecipient.java

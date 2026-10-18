@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
 
 @Repository
@@ -16,6 +17,10 @@ public interface CampaignRecipientExclusionRepository extends JpaRepository<Camp
 
     @Query("SELECT e.buyerId FROM CampaignRecipientExclusion e WHERE e.campaignId = :campaignId")
     List<Long> findBuyerIdsByCampaignId(@Param("campaignId") Long campaignId);
+
+    @Query("SELECT e.buyerId FROM CampaignRecipientExclusion e WHERE e.campaignId = :campaignId AND e.buyerId IN :buyerIds")
+    List<Long> findBuyerIdsByCampaignIdAndBuyerIdIn(@Param("campaignId") Long campaignId,
+                                                    @Param("buyerIds") Collection<Long> buyerIds);
 
     @Modifying
     @Query("DELETE FROM CampaignRecipientExclusion e WHERE e.campaignId = :campaignId")

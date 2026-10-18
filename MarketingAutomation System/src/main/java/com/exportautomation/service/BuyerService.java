@@ -10,6 +10,7 @@ import com.exportautomation.repository.BuyerRepository;
 import com.exportautomation.repository.CampaignRecipientExclusionRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.BufferedReader;
@@ -43,6 +44,7 @@ public class BuyerService {
                 .orElseThrow(() -> new ResourceNotFoundException("Buyer not found with id: " + id));
     }
 
+    @Transactional
     public Buyer createBuyer(CreateBuyerRequest request) {
         String normalizedEmail = normalizeEmail(request.getEmail());
         validateEmailFormat(normalizedEmail);
@@ -58,9 +60,9 @@ public class BuyerService {
         return buyerRepository.save(buyer);
     }
 
+    @Transactional
     public Buyer updateBuyer(Long id, UpdateBuyerRequest request) {
-        Buyer existing = buyerRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Buyer not found with id: " + id));
+        Buyer existing = getBuyerById(id);
 
         String normalizedEmail = normalizeEmail(request.getEmail());
         validateEmailFormat(normalizedEmail);
@@ -76,6 +78,14 @@ public class BuyerService {
         existing.setEmail(normalizedEmail);
         existing.setWebsite(request.getWebsite() != null ? request.getWebsite().trim() : null);
         existing.setCountry(request.getCountry().trim());
+        // Location is only overwritten when the request actually carries it, so a
+        // partial update never wipes a city/state discovered by buyer search.
+        if (request.getState() != null) {
+            existing.setState(request.getState().isBlank() ? null : request.getState().trim());
+        }
+        if (request.getCity() != null) {
+            existing.setCity(request.getCity().isBlank() ? null : request.getCity().trim());
+        }
         existing.setSourcePlatform(request.getSourcePlatform() != null ? request.getSourcePlatform().trim() : null);
         existing.setBusinessType(request.getBusinessType() != null ? request.getBusinessType().trim() : null);
         existing.setSourceUrl(request.getSourceUrl() != null ? request.getSourceUrl().trim() : null);
@@ -86,9 +96,9 @@ public class BuyerService {
         return buyerRepository.save(existing);
     }
 
+    @Transactional
     public void deleteBuyer(Long id) {
-        Buyer existing = buyerRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Buyer not found with id: " + id));
+        Buyer existing = getBuyerById(id);
         exclusionRepository.deleteByBuyerId(id);
         buyerRepository.delete(existing);
     }
@@ -121,6 +131,7 @@ public class BuyerService {
         return buyerRepository.findByProductNameIgnoreCase(productName);
     }
 
+    @Transactional
     public CsvImportResult importCsv(MultipartFile file) {
         CsvImportResult result = new CsvImportResult();
 
@@ -308,6 +319,8 @@ public class BuyerService {
         buyer.setCompanyName(request.getCompanyName().trim());
         buyer.setWebsite(request.getWebsite() != null ? request.getWebsite().trim() : null);
         buyer.setCountry(request.getCountry().trim());
+        buyer.setState(request.getState() != null && !request.getState().isBlank() ? request.getState().trim() : null);
+        buyer.setCity(request.getCity() != null && !request.getCity().isBlank() ? request.getCity().trim() : null);
         buyer.setSourcePlatform(request.getSourcePlatform() != null ? request.getSourcePlatform().trim() : null);
         buyer.setBusinessType(request.getBusinessType() != null ? request.getBusinessType().trim() : null);
         buyer.setSourceUrl(request.getSourceUrl() != null ? request.getSourceUrl().trim() : null);

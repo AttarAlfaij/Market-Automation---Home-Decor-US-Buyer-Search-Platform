@@ -13,11 +13,15 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.net.URI;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/api/buyers")
@@ -42,14 +46,33 @@ public class BuyerSearchController {
                 request.getProductName(), request.getResultLimit(),
                 request.getState(), request.getCity(), request.getCountry());
 
-        int totalFound = searchResults.size();
+        // Snapshot the websites/emails already stored so a buyer that is already
+        // in the database is NEITHER saved NOR returned as a search result.
+        Set<String> knownWebsites = new HashSet<>();
+        for (String website : buyerRepository.findAllWebsiteValues()) {
+            String dedupKey = dedupKey(website);
+            if (dedupKey != null) {
+                knownWebsites.add(dedupKey);
+            }
+        }
+        Set<String> knownEmails = new HashSet<>();
+        for (String email : buyerRepository.findAllEmailValues()) {
+            if (email != null && !email.isBlank()) {
+                knownEmails.add(email.trim().toLowerCase(Locale.ROOT));
+            }
+        }
+
         int totalSaved = 0;
         int totalSkippedExisting = 0;
         int totalSkippedDuplicateEmail = 0;
+        List<BuyerSearchResult> newResults = new ArrayList<>();
 
         for (BuyerSearchResult result : searchResults) {
-            if (result.getWebsite() != null && !result.getWebsite().isEmpty()
-                    && buyerRepository.existsByWebsiteIgnoreCase(result.getWebsite())) {
+            String dedupKey = null;
+            if (result.getWebsite() != null && !result.getWebsite().isEmpty()) {
+                dedupKey = dedupKey(result.getWebsite());
+            }
+            if (dedupKey != null && knownWebsites.contains(dedupKey)) {
                 totalSkippedExisting++;
                 logger.debug("SKIP '{}' - website '{}' already in database",
                         result.getCompanyName(), result.getWebsite());
@@ -60,7 +83,7 @@ public class BuyerSearchController {
             if (result.getEmail() != null && !result.getEmail().isBlank()) {
                 normalizedEmail = result.getEmail().trim().toLowerCase(Locale.ROOT);
             }
-            if (normalizedEmail != null && buyerRepository.existsByEmailIgnoreCase(normalizedEmail)) {
+            if (normalizedEmail != null && knownEmails.contains(normalizedEmail)) {
                 Optional<Buyer> existing = buyerRepository.findByEmailIgnoreCase(normalizedEmail);
                 totalSkippedDuplicateEmail++;
                 logger.info("DUPLICATE EMAIL | buyer='{}' | email={} | existing record={} (id={})"
@@ -105,6 +128,7 @@ public class BuyerSearchController {
             try {
                 buyerRepository.save(buyer);
                 totalSaved++;
+                newResults.add(result);
                 logger.info("SAVED '{}' | website={} | email={} | type={} | source={}",
                         buyer.getCompanyName(), buyer.getWebsite(),
                         buyer.getEmail() != null ? buyer.getEmail() : "(none)",
@@ -121,17 +145,68 @@ public class BuyerSearchController {
         }
 
         Map<String, Object> responseData = new HashMap<>();
-        responseData.put("results", searchResults);
-        responseData.put("totalFound", totalFound);
-        responseData.put("totalSaved", totalSaved);
+        responseData.put("results", newResults);
+        responseData.put("totalFound", newResults.size());
+        responseData.put("totalSaved", newResults.size());
+        responseData.put("totalSkippedExisting", totalSkippedExisting);
+        responseData.put("totalSkippedDuplicateEmail", totalSkippedDuplicateEmail);
 
         logger.info("========================================");
         logger.info("SEARCH RESULT: found={}, saved={}, skipExisting={}, skipDupEmail={}",
-                totalFound, totalSaved, totalSkippedExisting, totalSkippedDuplicateEmail);
+                newResults.size(), totalSaved, totalSkippedExisting, totalSkippedDuplicateEmail);
         logger.info("========================================");
 
         return ResponseEntity.ok(ApiResponse.success(
-                "Search completed. Found " + totalFound + " results, saved " + totalSaved + " new buyers.",
+                "Search completed. Found " + newResults.size() + " new results, saved "
+                        + totalSaved + " new buyers.",
                 responseData));
+    }
+
+    /** Dedup key for a website: the bare host for real company sites (mirrors the
+     *  buyer-search service, which treats a domain as one business); the full
+     *  host+path for social pages, so two different LinkedIn/Facebook pages are
+     *  never merged and an already-saved social page is never returned twice. */
+    private String dedupKey(String website) {
+        if (website == null || website.isBlank()) {
+            return null;
+        }
+        String value = website.trim().toLowerCase(Locale.ROOT);
+        String host = null;
+        String path = "";
+        try {
+            URI uri = URI.create(value);
+            host = uri.getHost();
+            if (host != null) {
+                path = uri.getPath() == null ? "" : uri.getPath();
+                while (path.endsWith("/")) {
+                    path = path.substring(0, path.length() - 1);
+                }
+            }
+        } catch (Exception ignored) {
+            // fall through to the scheme-less fallback below
+        }
+        if (host == null) {
+            int schemeEnd = value.indexOf("://");
+            if (schemeEnd >= 0) {
+                value = value.substring(schemeEnd + 3);
+            }
+            int slash = value.indexOf('/');
+            if (slash >= 0) {
+                value = value.substring(0, slash);
+            }
+            if (value.startsWith("www.")) {
+                value = value.substring(4);
+            }
+            return value.isEmpty() ? null : value;
+        }
+        host = host.toLowerCase(Locale.ROOT);
+        if (host.startsWith("www.")) {
+            host = host.substring(4);
+        }
+        if (host.equals("linkedin.com") || host.equals("facebook.com")) {
+            host = host + path;
+            return host.isEmpty() ? null : host;
+        }
+        return host;
     }
 }

@@ -417,6 +417,8 @@ const US_STATES = [
               <th>Buyer Name</th>
               <th>Company</th>
               <th>Location</th>
+              <th>City</th>
+              <th>State</th>
               <th>Email</th>
               <th>Business Type</th>
               <th>Source</th>
@@ -429,6 +431,8 @@ const US_STATES = [
                 <td>${escapeHtml(r.buyerName && r.buyerName !== r.companyName ? r.buyerName : "-")}</td>
                 <td>${escapeHtml(r.companyName)}</td>
                 <td>${escapeHtml(r.location || "-")}</td>
+                <td>${escapeHtml(r.city || "-")}</td>
+                <td>${escapeHtml(r.state || "-")}</td>
                 <td>${r.email ? escapeHtml(r.email) : '<span style="color:var(--color-text-muted);">Not found</span>'}</td>
                 <td>${escapeHtml(r.businessType || "-")}</td>
                 <td>${escapeHtml(sourceLabelFromUrl(r.sourceUrl))}</td>

@@ -44,20 +44,27 @@ public final class RelatedBuyerCategories {
     // in the order the categories are searched.
     // ------------------------------------------------------------------
 
-    // Singing bowls: the wellness / meditation / therapy trades that genuinely
-    // stock bowls, ordered from the most specific use case to the broadest.
+    // Singing bowls: the SOUND-THERAPY trades that genuinely stock bowls, ordered
+    // from the most specific use case to the broadest. Sound therapy / sound
+    // healing leads the list because that is the core trade for singing bowls;
+    // the meditation, yoga, wellness and spiritual trades follow as the broader
+    // stockists. ORDER IS SEARCH PRIORITY and the planner caps the added queries
+    // (MAX_RELATED_BUYER_CATEGORY_QUERIES), so the sound-therapy buyers are the
+    // ones actually fired first.
+    // The list length matches MAX_RELATED_BUYER_CATEGORY_QUERIES (11) so every
+    // entry is actually fired, in this order.
     private static final List<String> SINGING_BOWL_CATEGORIES = List.of(
-            "yoga studios",
-            "meditation centers",
-            "wellness centers",
-            "sound healing practitioners",
             "sound therapy centers",
+            "sound therapy practitioners",
+            "sound therapy studios",
+            "sound healing practitioners",
+            "sound healing centers",
+            "sound bath practitioners",
+            "meditation centers",
+            "yoga studios",
+            "wellness centers",
             "spiritual shops",
-            "buddhist stores",
-            "holistic wellness stores",
-            "spas",
-            "retreat centers",
-            "yoga teachers"
+            "buddhist stores"
     );
 
     // Decorated / decorative jars (with a handle): the home-decor, gift, craft

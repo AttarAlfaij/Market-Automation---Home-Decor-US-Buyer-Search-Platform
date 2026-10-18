@@ -723,7 +723,24 @@ public class FirecrawlBuyerSearchService {
             "forbes.com", "buzzfeed.com", "huffpost.com", "nytimes.com",
             "washingtonpost.com", "theguardian.com", "apnews.com",
             "reuters.com", "news.com", "newsweek", "timesofindia",
-            "thetimes.co.uk", "telegraph.co.uk", "independent.co.uk"
+            "thetimes.co.uk", "telegraph.co.uk", "independent.co.uk",
+            // book retailers / publishers / reading platforms
+            "goodreads.com", "barnesandnoble", "abebooks", "alibris",
+            "thriftbooks", "betterworldbooks", "bookdepository",
+            "bookshop.org", "waterstones", "powells.com", "biblio.com",
+            "bookfinder", "indiebound", "booksamillion", "halfpricebooks",
+            "openlibrary.org", "gutenberg.org", "librarything",
+            "worldcat.org", "penguinrandomhouse", "harpercollins",
+            "simonandschuster", "hachettebookgroup", "bloomsbury.com",
+            "lithub.com", "kirkusreviews", "publishersweekly", "bookbub",
+            "bookriot", "chegg.com", "scribd.com",
+            // auction houses / online auction platforms
+            "sothebys.com", "christies.com", "bonhams.com", "doylenewyork",
+            "swanngalleries", "liveauctioneers", "invaluable.com",
+            "auctionzip", "catawiki", "heritageauctions", "rrauction.com",
+            "barnebys", "the-saleroom", "saleroom.com", "hibid.com",
+            "proxibid", "auction.com", "bidsquare", "govdeals",
+            "auctionninja", "shopgoodwill", "icollector", "artcurial"
     );
 
     // URL path segments that mark a music / news / event / registration
@@ -800,6 +817,21 @@ public class FirecrawlBuyerSearchService {
             "request an appointment"
     };
 
+    // CANADA-ONLY hospital / healthcare wording. A hospital, emergency
+    // department, clinic, medical centre or health-authority page is never a
+    // buyer of a physical product, so a Canada search drops it even when the
+    // page shows a shop, a cart or prices. Checked against the TITLE first, so
+    // "Women's College Hospital Gift Shop" is caught from its own headline.
+    private static final String[] CANADA_HOSPITAL_PHRASES = {
+            "hospital", "hopital", "hospitalier", "clinique", "medical clinic",
+            "medical centre", "medical center", "health centre", "health center",
+            "health authority", "health region", "emergency department",
+            "emergency room", "urgent care", "inpatient", "outpatient",
+            "patient portal", "find a doctor", "find a physician",
+            "book an appointment", "referral", "nurse practitioner",
+            "family medicine", "walk-in clinic", "sick kids", "sickkids"
+    };
+
     // Hospital / healthcare copy screened BEFORE the store-evidence bypass: a
     // hospital or clinic gift shop and a hospital-run wellness spa are still
     // healthcare pages and never buy a decor product.
@@ -835,6 +867,308 @@ public class FirecrawlBuyerSearchService {
             "room rate", "guest rooms", "suites available", "crib available",
             "free cancellation", "cancel your booking", "trip planner"
     };
+
+    // ------------------------------------------------------------------
+    // CANADA-ONLY STRICT PRODUCT-RELEVANCE FILTER
+    //
+    // A Canada buyer search returns ONLY businesses that really trade in the
+    // searched product. Hospital / healthcare pages, press-release and news
+    // pages, downloadable FILES / documents and government websites can all
+    // contain the product words and still never buy anything, so a Canada
+    // search drops them UNCONDITIONALLY - there is no store-evidence escape
+    // hatch and no "it mentions the product, so it must be a shop" bypass.
+    // This is what makes the returned set product-related: a "singing bowls"
+    // Canada search surfaces sound-therapy, meditation, yoga, Tibetan singing
+    // bowl and healing bowl businesses - never a hospital gift shop, a wire
+    // press release, a PDF catalogue or a provincial government page.
+    //
+    // Every method below is reached ONLY through the `canada` flag, which is
+    // TRUE exclusively for a Canada search, so USA search behaviour - queries,
+    // budget, filters and results - is completely unchanged.
+    // ------------------------------------------------------------------
+
+    // CANADA-ONLY API-level host exclusions, added to the outgoing
+    // excludeDomains list of a Canada search ONLY. A Canadian hospital, health
+    // authority, government body, news wire / paper or file host can never be a
+    // buyer of a physical product, so the engine is told not to return them in
+    // the first place - the Canada search spends its whole result budget on
+    // actual product businesses. A USA search sends the unchanged shared list.
+    private static final Set<String> CANADA_EXCLUDED_DOMAINS = Set.of(
+            // federal government / public bodies
+            "canada.ca", "gc.ca", "gouv.qc.ca", "quebec.ca", "statcan.gc",
+            // provincial & territorial government / health authorities
+            "health.gov.on.ca", "ontariohealth.ca", "ontariohealth.gov.on.ca",
+            "healthpei.ca", "albertahealthservices.ca",
+            "saskhealthauthority.ca", "horizonhealth.ca", "workinhealth.ns.ca",
+            "gov.nl.ca", "sante.gouv.qc.ca",
+            // national hospitals / health networks
+            "sickkids.ca", "shrinerhospital.ca", "hopitalpierreboucher.ca",
+            "hopitalgeneral.ca", "cliniquequebec",
+            "polycliniquedelomedecin.ca",
+            // news wires / papers / broadcasters
+            "newswire.ca", "newsfilecorp.com", "prnewswire.com",
+            "businesswire.com", "globenewswire.com", "cbc.ca",
+            "ctvnews.ca", "globalnews.ca", "thestar.com", "torontosun.com",
+            "nationalpost.com", "financialpost.com", "montrealgazette.com",
+            "vancouversun.com", "winnipegfreepress.com", "ottawacitizen.com",
+            "calgaryherald.com", "edmontonjournal.com", "thespec.com",
+            "leaderpost.com", "pressreader.com", "marketscreener.com",
+            "betakit.com",
+            // files / documents
+            "issuu.com", "scribd.com", "slideshare.net", "yumpu.com",
+            "pdfcoffee.com", "studylib.net", "moam.info"
+    );
+
+    // Federal Canadian government / public-body host LABELS. Matched per
+    // dot-delimited host label (or a label ending in "-label"), never as a raw
+    // substring, so "gc.ca" is caught while a shop hosted at "organic.ca" is
+    // NOT. A federal department, agency or crown body never buys a decor
+    // product.
+    private static final Set<String> CANADA_GOVERNMENT_HOST_LABELS = Set.of(
+            "gc", "gouv", "canada", "canadacentre", "statcan",
+            "servicecanada", "publicservices", "publicworks",
+            "canadascholarship", "canadasuperfund", "canadapost-postes",
+            "elections", "prgc"
+    );
+
+    // Canadian hospital / health-authority host TOKENS, matched as a raw
+    // host SUBSTRING because they are brand/compound tokens rather than host
+    // labels: "stmaryshospital.ca", "hopitalgeneral.ca", "albertahealthservices.ca"
+    // and "sickkids.ca" are all health sites that never buy a decor product,
+    // while a genuine retailer's domain never contains one of these tokens.
+    private static final Set<String> CANADA_HEALTHCARE_HOST_PARTS = Set.of(
+            "hospital", "hopital", "clinique", "clinic", "medicalcentre",
+            "medicalcenter", "healthcentre", "healthcenter", "healthservices",
+            "healthauthority", "healthregion", "healthpei", "sickkids",
+            "shriners", "shriner", "cardiac", "oncology", "psychiatrie",
+            "soins", "polyclinique", "emergency", "urgentcare", "medicalclinic"
+    );
+
+    // Government / public-body host SUFFIXES: the federal .gc.ca /
+    // .canada.ca domains plus the provincial and territorial ones. A
+    // provincial domain alone is NOT decisive - a few legitimate small
+    // businesses use them - so the government wording below must also be
+    // present before the page is dropped.
+    private static final Set<String> CANADA_GOVERNMENT_HOST_SUFFIXES = Set.of(
+            ".gc.ca", ".canada.ca", ".on.ca", ".bc.ca", ".qc.ca", ".mb.ca",
+            ".sk.ca", ".ns.ca", ".nb.ca", ".nl.ca", ".pe.ca", ".nt.ca",
+            ".nu.ca", ".yt.ca"
+    );
+
+    // Government / public-body wording. Used alone on federal hosts and
+    // together with a province domain elsewhere, so an ordinary business whose
+    // copy happens to mention a city is never dropped.
+    private static final String[] CANADA_GOVERNMENT_PHRASES = {
+            "government of canada", "government of", "ministry of",
+            "department of", "official website", "public health agency",
+            "public health ontario", "regional municipality",
+            "regional district", "municipal government", "municipal office",
+            "township office", "crown corporation", "crown agency",
+            "statistics canada", "revenue agency",
+            "public services and procurement", "canada revenue agency",
+            "service canada", "municipal bylaw", "city council",
+            "town council", "council meeting", "zoning", "land use permit",
+            "building permit", "public consultation", "open government",
+            "city of ", "town of ", "ville de ", "municipal services",
+            "provincial government", "territorial government"
+    };
+
+    // Canadian news / editorial outlets beyond the international ones already
+    // screened: a Canadian paper or broadcaster must never surface as a buyer.
+    private static final Set<String> CANADA_NEWS_HOST_PARTS = Set.of(
+            "cbc.ca", "cbcnews", "ctvnews", "globalnews", "globaltv",
+            "thestar.com", "torontosun", "thesun.on.ca", "nationalpost",
+            "financialpost", "montrealgazette", "vancouversun",
+            "winnipegfreepress", "ottawacitizen", "calgaryherald",
+            "edmontonjournal", "thespec", "leaderpost", "thetelegraph.ca",
+            "pressreader", "newsfilecorp", "marketscreener",
+            "betakit", "betabusiness", "businesswire",
+            "newswire.ca", "newswire", "cision", "prnewswire",
+            "globenewswire", "prweb", "einpresswire", "accesswire",
+            "newsfile", "newsroom"
+    );
+
+    // File / document hosting. A catalogue PDF, a price list or a spec sheet is
+    // never a business that can be emailed as a buyer.
+    private static final Set<String> CANADA_FILE_HOST_PARTS = Set.of(
+            "issuu.com", "scribd.com", "slideshare", "docs.google.com",
+            "drive.google.com", "pdfcoffee", "yumpu", "vdocuments",
+            "pdfslide", "studylib", "moam.info", "docslib.org",
+            "pdfdrive", "filetypepdf", "pdf4pro", "pdfcoffee.com"
+    );
+
+    // Press-release / news-wire page wording.
+    private static final String[] CANADA_PRESS_PHRASES = {
+            "press release", "press releases", "news release",
+            "for immediate release", "media advisory", "media advisory",
+            "media relations", "media contact:", "newsroom", "news room",
+            "backgrounder", "read the full story", "view the press release",
+            "announces today", "is pleased to announce"
+    };
+
+    // News / editorial page wording (Canadian searches reject these even when
+    // the page shows store evidence).
+    private static final String[] CANADA_NEWS_PHRASES = {
+            "breaking news", "latest news", "news update", "news article",
+            "news coverage", "news roundup", "in the news", "media coverage",
+            "headlines", "obituary", "editorial", "opinion:",
+            "interview with", "podcast episode", "we report",
+            "reader comments", "subscribe to our newsletter"
+    };
+
+    /**
+     * CANADA-ONLY strict screen. Returns a REJECT reason when the page can
+     * never be a product buyer - a hospital / healthcare page, a press-release
+     * or news page, a downloadable file / document, or a government /
+     * public-body website - or null when the page may still be a
+     * product-relevant Canadian business.
+     *
+     * Deliberately STRICTER than the shared screens: it is checked BEFORE the
+     * legitimate-product-URL escape hatch and carries no store-evidence
+     * bypass, so "/shop", "/collections", a cart or prices can never rescue a
+     * hospital, a press release, a PDF or a government page. It is also
+     * completely silent for USA searches: the only call sites pass
+     * `canada == true`.
+     *
+     * @param canada TRUE only for a Canada search; FALSE short-circuits to null
+     */
+    private String canadaStrictContentReason(String url, String titleText, String snippetText,
+                                             String homeText) {
+        String hostL = hostOf(url) == null ? "" : hostOf(url).toLowerCase(Locale.ROOT);
+        String path = pathOf(url);
+        String title = prepareText(titleText);
+        String text = prepareText(titleText, snippetText, homeText);
+
+        // 1) Government / public body. A federal government host LABEL ("gc",
+        //    "canada", "gouv", ...) is decisive on its own; a provincial domain
+        //    alone is not, so it additionally needs government wording. This is
+        //    matched per host label, never as a raw substring, so a shop at
+        //    "organic.ca" is never mistaken for a ".gc.ca" government page.
+        boolean federalGovernmentHost = false;
+        for (String label : CANADA_GOVERNMENT_HOST_LABELS) {
+            if (hasHostLabel(hostL, label)) {
+                federalGovernmentHost = true;
+                break;
+            }
+        }
+        boolean governmentDomain = false;
+        for (String suffix : CANADA_GOVERNMENT_HOST_SUFFIXES) {
+            if (hostL.endsWith(suffix)) {
+                governmentDomain = true;
+                break;
+            }
+        }
+        if (federalGovernmentHost) {
+            return REJECT_IRRELEVANT_CONTENT + ": host '" + hostL
+                    + "' is a Canadian government / public body, not a product business";
+        }
+        // A government PAGE anywhere else. The wording must be in the TITLE (a
+        // very strong signal), or anywhere in the page text when the host is a
+        // known public-sector domain (a .gov host, or a provincial / municipal
+        // domain - which alone is NOT enough, because a few legitimate small
+        // businesses use them).
+        String government = firstMatchedPhrase(CANADA_GOVERNMENT_PHRASES, title);
+        if (government == null && (governmentDomain
+                || hostL.endsWith(".gov") || hostL.contains(".gov.")
+                || hostL.contains("municipal") || hostL.contains("ville.")
+                || hostL.contains("city."))) {
+            government = firstMatchedPhrase(CANADA_GOVERNMENT_PHRASES, text);
+        }
+        if (government != null) {
+            return REJECT_IRRELEVANT_CONTENT + ": government / public-body content ('"
+                    + government + "')";
+        }
+
+        // 2) Files / documents - a PDF catalogue, price list or spec sheet is
+        //    never a buyer, whatever its filename says.
+        for (String part : CANADA_FILE_HOST_PARTS) {
+            if (hostL.contains(part)) {
+                return REJECT_IRRELEVANT_CONTENT + ": host '" + hostL
+                        + "' is a file / document host, not a product business";
+            }
+        }
+        if (isFileUrl(path) || isFileUrl(shopPathText(url))) {
+            return REJECT_FILE + " (Canada search: file/document links are never buyers)";
+        }
+
+        // 3) Hospital / healthcare - host identity FIRST (host label and the
+        //    Canadian compound tokens), then page wording. No store-evidence
+        //    bypass: a hospital gift shop or a hospital-run wellness spa still
+        //    buys no decor products.
+        for (String label : HEALTHCARE_HOST_LABELS) {
+            if (hasHostLabel(hostL, label)) {
+                return REJECT_IRRELEVANT_CONTENT + ": host '" + hostL
+                        + "' is a hospital / healthcare site, not a product business";
+            }
+        }
+        for (String part : CANADA_HEALTHCARE_HOST_PARTS) {
+            if (hostL.contains(part)) {
+                return REJECT_IRRELEVANT_CONTENT + ": host '" + hostL
+                        + "' is a hospital / healthcare site, not a product business";
+            }
+        }
+        for (String part : HEALTHCARE_HOST_PARTS) {
+            if (hostL.contains(part)) {
+                return REJECT_IRRELEVANT_CONTENT + ": host '" + hostL
+                        + "' is a hospital / healthcare site, not a product business";
+            }
+        }
+        String hospital = firstMatchedPhrase(HOSPITAL_CONTENT_PHRASES, text);
+        if (hospital == null) {
+            hospital = firstMatchedPhrase(MEDICAL_CONTENT_PHRASES, text);
+        }
+        if (hospital == null) {
+            hospital = firstMatchedPhrase(CANADA_HOSPITAL_PHRASES, title);
+        }
+        if (hospital != null) {
+            return REJECT_IRRELEVANT_CONTENT + ": hospital / healthcare page ('"
+                    + hospital + "')";
+        }
+
+        // 4) News / press release / editorial - never a buyer of a physical
+        //    product, whatever else the page sells.
+        for (String part : CANADA_NEWS_HOST_PARTS) {
+            if (hostL.contains(part)) {
+                return REJECT_IRRELEVANT_CONTENT + ": host '" + hostL
+                        + "' is a news / press-release outlet, not a product business";
+            }
+        }
+        for (String part : NEWS_HOST_PARTS) {
+            if (hostL.contains(part)) {
+                return REJECT_IRRELEVANT_CONTENT + ": host '" + hostL
+                        + "' is a news / editorial site, not a product business";
+            }
+        }
+        for (String part : IRRELEVANT_CONTENT_HOST_PARTS) {
+            if (hostL.contains(part)) {
+                return REJECT_IRRELEVANT_CONTENT + ": host '" + hostL
+                        + "' is a music / event / research / news platform, not a product business";
+            }
+        }
+        String press = firstMatchedPhrase(CANADA_PRESS_PHRASES, text);
+        if (press != null) {
+            return REJECT_IRRELEVANT_CONTENT + ": press-release / news-wire page ('"
+                    + press + "')";
+        }
+        String news = firstMatchedPhrase(CANADA_NEWS_PHRASES, text);
+        if (news != null) {
+            return REJECT_IRRELEVANT_CONTENT + ": news / editorial page ('" + news + "')";
+        }
+        return null;
+    }
+
+    /** The Firecrawl two-letter country code for a searched country
+     *  ("Canada" -> "CA", anything else -> "US"). */
+    private static String firecrawlCountryCode(String country) {
+        return country != null && country.trim().equalsIgnoreCase("Canada") ? "CA" : "US";
+    }
+
+    /** TRUE only for a Canada search. Every Canada-only behaviour change in
+     *  this service is gated on this, so a USA search is byte-for-byte
+     *  unchanged. */
+    private static boolean isCanadaCountry(String country) {
+        return country != null && country.trim().equalsIgnoreCase("Canada");
+    }
 
     // ------------------------------------------------------------------
     // CHEAP RAW PRE-FILTER. Runs on the RAW Firecrawl result using ONLY the
@@ -924,7 +1258,30 @@ public class FirecrawlBuyerSearchService {
             "engadget", "arstechnica", "theverge", "zdnet", "cnet",
             "pcmag", "digitaltrends", "tomsguide", "howstuffworks", "thespruce",
             "instructables", "hgtv", "housebeautiful", "architecturaldigest",
-            "thespruce.com", "apartmenttherapy", "bhg", "householdtips"
+            "thespruce.com", "apartmenttherapy", "bhg", "householdtips",
+            // Global news outlets (non-US broadcasters, wires and national papers)
+            "aljazeera.com", "deutschewelle", "france24", "lemonde.fr",
+            "economist.com", "bloomberg.com", "cnbc.com", "skynews",
+            "scmp.com", "straitstimes", "channelnewsasia", "euronews",
+            "thehindu.com", "hindustantimes", "ndtv.com", "indiatimes",
+            "smh.com.au", "theage.com.au", "stuff.co.nz", "nzherald",
+            "japantimes", "koreatimes", "elpais", "spiegel.de", "corriere.it",
+            "folha.uol", "estadao", "clarin.com", "dailymail",
+            "telegraph.co.uk", "independent.co.uk", "afp.com", "msn.com",
+            "news.com.au", "9news.com.au", "7news.com.au", "abc.net.au",
+            "huffpost", "huffingtonpost", "theatlantic", "newyorker.com",
+            "nationalgeographic", "smithsonianmag", "livescience",
+            "sciencedaily", "phys.org", "history.com", "tmz.com",
+            "variety.com", "hollywoodreporter", "rollingstone", "billboard.com",
+            "pitchfork", "nme.com",
+            // Magazines (fashion, lifestyle, food, home) - never buyer businesses
+            "vogue.com", "gq.com", "cosmopolitan.com", "harpersbazaar",
+            "marieclaire", "glamour.com", "allure.com", "byrdie",
+            "refinery29", "popsugar", "goodhousekeeping", "countryliving",
+            "elledecor", "realsimple", "marthastewart", "southernliving",
+            "bonappetit", "foodandwine", "epicurious", "seriouseats",
+            "tasteofhome", "delish.com", "food52", "thekitchn", "saveur.com",
+            "travelandleisure", "cntraveler"
     );
 
     // News / editorial / press page language.
@@ -1137,10 +1494,26 @@ public class FirecrawlBuyerSearchService {
     };
 
     private static final Set<String> FILE_EXTENSIONS = Set.of(
-        "pdf", "doc", "docx", "xls", "xlsx", "csv", "ppt", "pptx", "txt",
-        "rtf", "zip", "rar", "7z", "gz", "tar", "jpg", "jpeg", "png", "gif",
-        "webp", "tiff", "svg", "mp3", "mp4", "epub"
+        "pdf", "doc", "docx", "xls", "xlsx", "xlsb", "csv", "ppt", "pptx",
+        "txt", "rtf", "odt", "ods", "odp", "odg", "odf", "docm", "xlsm",
+        "pptm", "wps", "wpd", "pages", "numbers", "key",
+        "zip", "rar", "7z", "gz", "tar", "jpg", "jpeg", "png", "gif",
+        "webp", "tiff", "svg", "mp3", "mp4", "wav", "flac", "aac",
+        "epub", "pdb", "mobi", "azw"
     );
+
+    // Search-title wording that marks a downloadable document result (Google
+    // prefixes actual PDF/Word/Excel hits with "[PDF]"/"[DOC]"). A document is
+    // never a buyer business, even when its URL does not end in a file
+    // extension (e.g. /download?id=...).
+    private static final String[] DOCUMENT_TITLE_MARKERS = {
+        "[pdf", "(pdf)", "pdf file", "pdf document", "pdf download",
+        "download pdf", "filetype:pdf", "pdf format", " as a pdf",
+        " in pdf", "pdf version", "pdf catalog", "pdf catalogue",
+        "pdf price list", "pdf brochure", "pdf flyer", "pdf poster",
+        "word document", "excel file", "docx file", "xlsx document",
+        "spreadsheet file", ".pdf"
+    };
 
     private static final Set<String> ACADEMIC_PATH_MARKERS = Set.of(
         "/research", "/papers", "/publications", "/journal", "/theses",
@@ -1346,10 +1719,10 @@ public class FirecrawlBuyerSearchService {
     // holders, votive, jars, home decor). A slot's phrasing stays PRODUCT +
     // BUYER PROFILE: `"<cat>"... store "<product>" <state>`.
     private static final List<List<String>> RELATED_CATEGORY_PROFILES = List.of(
-        // Singing / wellness bowls: meditation & spiritual & wellness stores;
-        // metaphysical & crystal & gift shops.
-        List.of("meditation", "spiritual", "wellness"),
-        List.of("metaphysical", "crystal", "gift"),
+        // Singing / wellness bowls: sound-therapy & meditation & wellness stores;
+        // sound-healing & metaphysical & crystal stores.
+        List.of("sound therapy", "sound healing", "meditation"),
+        List.of("sound healing", "metaphysical", "crystal"),
         // Lanterns / lighting: home-decor, lighting, garden stores.
         List.of("home decor", "lighting", "garden"),
         List.of("outdoor", "furniture", "gift"),
@@ -1414,9 +1787,13 @@ public class FirecrawlBuyerSearchService {
     };
 
     // ---- Singing / wellness bowl family vocabulary ----
+    // "sound therapy" / "sound healing" LEAD: singing bowls are searched
+    // primarily through their sound-therapy use case, so the generated phrases
+    // start there and the broader style words follow.
     private static final String[] BOWL_STYLE_MODIFIERS = {
+        "sound therapy", "sound healing", "sound bath",
         "crystal", "tibetan", "himalayan", "buddhist", "meditation", "spiritual",
-        "yoga", "healing", "sound healing", "sound therapy", "chakra", "antique",
+        "yoga", "healing", "chakra", "antique",
         "traditional", "artisan", "handcrafted", "handmade", "metal", "bronze", "brass"
     };
     private static final String[] BOWL_CORE_SYNONYMS = {
@@ -2741,9 +3118,6 @@ public class FirecrawlBuyerSearchService {
     private WebClient webClient;
 
     @Autowired
-    private FirecrawlConfig firecrawlConfig;
-
-    @Autowired
     private EmailDiscoveryService emailDiscoveryService;
 
     @Autowired
@@ -2752,8 +3126,12 @@ public class FirecrawlBuyerSearchService {
     @Autowired
     private BuyerRepository buyerRepository;
 
+    @Autowired
+    private FirecrawlConfig firecrawlConfig;
+
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    /** Runs one buyer search using the single application-wide Firecrawl API key. */
     public List<BuyerSearchResult> searchBuyers(String productName, int limit,
                                                  String state, String city, String country) {
         // HOME-DECOR CATEGORY GATE: every entered product must belong to one of
@@ -3315,6 +3693,16 @@ public class FirecrawlBuyerSearchService {
                         // copy is rejected here.
                         String preFilterReason = rawResultPreFilterReason(rawUrl,
                                 result.getRawTitle(), result.getSnippet());
+                        // CANADA-ONLY strict product-relevance screen: a hospital,
+                        // a press release / news page, a downloadable file and a
+                        // government website are dropped for a Canada search even
+                        // when they carry a shop URL or store evidence. Runs FIRST
+                        // so no credit is spent on them. FALSE for every USA
+                        // search, which is untouched.
+                        if (preFilterReason == null && canada) {
+                            preFilterReason = canadaStrictContentReason(rawUrl,
+                                    result.getRawTitle(), result.getSnippet(), null);
+                        }
                         if (preFilterReason != null) {
                             filteredFromQuery++;
                             totalRejected++;
@@ -4237,7 +4625,7 @@ public class FirecrawlBuyerSearchService {
             List<BuyerSearchResult> results;
             try {
                 results = executeSearch(query, entry.businessType(), apiKey, RESULTS_PER_QUERY,
-                        buildFirecrawlLocation(combo), budget);
+                        buildFirecrawlLocation(combo), budget, combo.country);
             } catch (BudgetExhaustedException e) {
                 budgetExhausted = true;
                 results = List.of();
@@ -4690,6 +5078,14 @@ public class FirecrawlBuyerSearchService {
         String irrelevantReason = irrelevantContentReason(sourceUrl, titleText, snippetText,
                 siteTextPrepared, hasProductSellingEvidence(titleText, snippetText,
                         siteTextPrepared, path, urlProductEvidence));
+        // CANADA-ONLY strict screen, re-run with the FULL page text so a
+        // hospital, press release, news article, file or government website is
+        // rejected here even when it shows store evidence (the shared screen's
+        // bypass). FALSE for every USA search.
+        if (irrelevantReason == null && isCanadaCountry(result.getCountry())) {
+            irrelevantReason = canadaStrictContentReason(sourceUrl, titleText,
+                    snippetText, siteTextPrepared);
+        }
         if (irrelevantReason != null) {
             logger.info("IRRELEVANT_CONTENT '{}' ({}) - {}",
                     result.getCompanyName(), result.getWebsite(), irrelevantReason);
@@ -8200,8 +8596,9 @@ public class FirecrawlBuyerSearchService {
         String tL = t.toLowerCase();
 
         // Files / documents (PDFs, office docs, archives, images...) are never
-        // buyer business pages.
-        if (isFileUrl(path)) {
+        // buyer business pages. Detected from the URL (path OR query-string
+        // file extension) and from search-title wording such as "[PDF]".
+        if (isDocumentResult(url, tL)) {
             return REJECT_FILE;
         }
 
@@ -8625,6 +9022,40 @@ public class FirecrawlBuyerSearchService {
         }
         String ext = tail.substring(tail.lastIndexOf('.') + 1).toLowerCase();
         return FILE_EXTENSIONS.contains(ext);
+    }
+
+    /** TRUE when the search result is a downloadable file/document rather than a
+     *  web page - never a buyer business. Checks the URL path extension, a file
+     *  name hidden in a query string (?file=catalog.pdf, ?download=...), and
+     *  search-title wording that marks a document ("[PDF] ...", "Catalog.pdf"). */
+    private boolean isDocumentResult(String url, String titleLower) {
+        if (url != null && !url.isBlank()) {
+            String p = pathOf(url);
+            if (isFileUrl(p)) {
+                return true;
+            }
+            String q = queryOf(url);
+            if (q != null && !q.isBlank()) {
+                for (String pair : q.split("&")) {
+                    int eq = pair.indexOf('=');
+                    String value = eq >= 0 ? pair.substring(eq + 1) : pair;
+                    if (!value.isEmpty() && value.contains(".")) {
+                        String ext = value.substring(value.lastIndexOf('.') + 1).toLowerCase();
+                        if (FILE_EXTENSIONS.contains(ext)) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        if (titleLower != null && !titleLower.isBlank()) {
+            for (String marker : DOCUMENT_TITLE_MARKERS) {
+                if (titleLower.contains(marker)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private boolean isAcademicLike(String host, String path, String titleLower) {
@@ -9075,7 +9506,7 @@ public class FirecrawlBuyerSearchService {
             List<BuyerSearchResult> results;
             try {
                 results = executeSearch(query, "Buyer", apiKey, RESULTS_PER_QUERY,
-                        firecrawlLocation, budget, true);
+                        firecrawlLocation, budget, true, countryNameFull);
             } catch (BudgetExhaustedException e) {
                 logger.warn("SOCIAL SEARCH stopped - {}", e.getMessage());
                 break;
@@ -9446,9 +9877,10 @@ public class FirecrawlBuyerSearchService {
 
     private List<BuyerSearchResult> executeSearch(String query, String businessType,
                                                    String apiKey, int limit,
-                                                   String location, SearchBudget budget)
+                                                   String location, SearchBudget budget,
+                                                   String country)
             throws JsonProcessingException {
-        return executeSearch(query, businessType, apiKey, limit, location, budget, false);
+        return executeSearch(query, businessType, apiKey, limit, location, budget, false, country);
     }
 
     private List<BuyerSearchResult> executeSearch(String query, String businessType,
@@ -9456,12 +9888,26 @@ public class FirecrawlBuyerSearchService {
                                                    String location, SearchBudget budget,
                                                    boolean allowSocial)
             throws JsonProcessingException {
+        return executeSearch(query, businessType, apiKey, limit, location, budget,
+                allowSocial, "USA");
+    }
+
+    private List<BuyerSearchResult> executeSearch(String query, String businessType,
+                                                   String apiKey, int limit,
+                                                   String location, SearchBudget budget,
+                                                   boolean allowSocial,
+                                                   String country)
+            throws JsonProcessingException {
         List<BuyerSearchResult> results = new ArrayList<>();
+        boolean canada = isCanadaCountry(country);
 
         Map<String, Object> requestBody = new LinkedHashMap<>();
         requestBody.put("query", query);
         requestBody.put("limit", limit);
-        requestBody.put("country", "US");
+        // Geo-scopes the search to the country the USER actually requested. A
+        // Canada search must never be US-biased, so the searched country is
+        // translated to its two-letter code here ("CA" / "US").
+        requestBody.put("country", firecrawlCountryCode(country));
         if (location != null && !location.isBlank()) {
             requestBody.put("location", location);
         }
@@ -9474,6 +9920,14 @@ public class FirecrawlBuyerSearchService {
         if (allowSocial) {
             excludeDomains.remove("linkedin.com");
             excludeDomains.remove("facebook.com");
+        }
+        if (canada) {
+            // CANADA ONLY: ask the engine for product businesses in the first
+            // place. Canadian hospitals, health authorities, government bodies,
+            // news wires / papers and file hosts are never buyers of a physical
+            // product, so they are excluded at the API level. A USA search sends
+            // the unchanged NON_BUSINESS_HOSTS list.
+            excludeDomains.addAll(CANADA_EXCLUDED_DOMAINS);
         }
         requestBody.put("excludeDomains", excludeDomains);
         requestBody.put("ignoreInvalidURLs", true);
@@ -9653,8 +10107,13 @@ public class FirecrawlBuyerSearchService {
                 noLink++;
             }
             if (!title.isEmpty() && !link.isEmpty()) {
+                // The SEARCHED country, not a hardcoded "USA": stamping "USA" on every
+                // result made a correctly-resolved Canadian address look like a
+                // foreign country conflict and got the buyer rejected. A USA
+                // search still stamps exactly "USA".
                 BuyerSearchResult parsed = new BuyerSearchResult(
-                        title, link, "USA", businessType, link, query, snippet);
+                        title, link, country == null || country.isBlank() ? "USA" : country,
+                        businessType, link, query, snippet);
                 if (!searchAddress.isEmpty()) {
                     parsed.setSearchAddress(searchAddress);
                 }

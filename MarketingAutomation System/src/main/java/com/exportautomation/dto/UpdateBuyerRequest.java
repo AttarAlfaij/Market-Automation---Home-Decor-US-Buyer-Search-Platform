@@ -20,6 +20,10 @@ public class UpdateBuyerRequest {
     @NotBlank(message = "Country is required")
     private String country;
 
+    private String state;
+
+    private String city;
+
     private String sourcePlatform;
 
     private String businessType;
@@ -47,6 +51,12 @@ public class UpdateBuyerRequest {
 
     public String getCountry() { return country; }
     public void setCountry(String country) { this.country = country; }
+
+    public String getState() { return state; }
+    public void setState(String state) { this.state = state; }
+
+    public String getCity() { return city; }
+    public void setCity(String city) { this.city = city; }
 
     public String getSourcePlatform() { return sourcePlatform; }
     public void setSourcePlatform(String sourcePlatform) { this.sourcePlatform = sourcePlatform; }

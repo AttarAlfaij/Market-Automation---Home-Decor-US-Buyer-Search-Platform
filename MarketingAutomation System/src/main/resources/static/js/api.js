@@ -37,6 +37,14 @@ const API = (() => {
     }
   }
 
+  function dateRangeQuery(startDate, endDate) {
+    const params = new URLSearchParams();
+    if (startDate) params.set("startDate", startDate);
+    if (endDate) params.set("endDate", endDate);
+    const qs = params.toString();
+    return qs ? `?${qs}` : "";
+  }
+
   return {
     getBuyers: () => request("/api/buyers"),
     getCampaigns: () => request("/api/campaigns"),
@@ -49,10 +57,15 @@ const API = (() => {
       mutate(`/api/campaigns/${campaignId}/recipients/${buyerId}`, "PUT", { email }),
     deleteRecipient: (campaignId, buyerId) =>
       mutate(`/api/campaigns/${campaignId}/recipients/${buyerId}`, "DELETE"),
+    deleteRecipients: (campaignId, buyerIds) =>
+      mutate(`/api/campaigns/${campaignId}/recipients/bulk`, "DELETE", { buyerIds }),
     sendCampaign: (campaignId, recipients) =>
       mutate(`/api/campaigns/${campaignId}/send`, "POST", { recipients }),
     getSendStatus: (id) => request(`/api/campaigns/${id}/send-status`),
-    getEmailTrackingStats: () => request("/api/email/tracking-stats"),
+    getEmailTrackingStats: (startDate, endDate) =>
+      request("/api/email/tracking-stats" + dateRangeQuery(startDate, endDate)),
+    getEmailSummary: (startDate, endDate) =>
+      request("/api/email/summary" + dateRangeQuery(startDate, endDate)),
     createBuyer: (data) => mutate("/api/buyers", "POST", data),
     searchBuyersUSA: (productName, resultLimit, state, city, country) =>
       mutate("/api/buyers/search-usa", "POST", { productName, resultLimit, state, city, country }),

@@ -3,9 +3,10 @@ const Tracking = (() => {
   let allCampaigns = [];
   let trackingStats = { sent: 0, pending: 0, responses: 0 };
   let currentTab = "activity";
-  let leadsAndResponsesSubTab = "responses";
-  let allResponses = [];
-  let allLeads = [];
+  let emailSummary = null;
+  let summaryFilters = { startDate: "", endDate: "" };
+
+  const STATUS_COLOR_PALETTE = ["#2563eb", "#f59e0b", "#0891b2", "#7c3aed", "#db2777", "#64748b"];
 
   async function render(container) {
     container.innerHTML = `
@@ -15,7 +16,7 @@ const Tracking = (() => {
       <div class="tab-bar">
         <button class="tab active" data-tab="activity">&#128203; Buyer Activity</button>
         <button class="tab" data-tab="campaigns">&#9993; Campaign Performance</button>
-        <button class="tab" data-tab="leads">&#128200; Leads &amp; Responses</button>
+        <button class="tab" data-tab="summary">&#128202; Email Summary</button>
       </div>
       <div id="trackingTabContent">
         <div class="state-message"><div class="spinner"></div><p>Loading tracking data...</p></div>
@@ -29,7 +30,7 @@ const Tracking = (() => {
         currentTab = t.dataset.tab;
         if (currentTab === "activity") renderActivity();
         else if (currentTab === "campaigns") renderCampaignPerformance();
-        else if (currentTab === "leads") renderLeadsAndResponses();
+        else if (currentTab === "summary") renderEmailSummary();
       });
     });
 
@@ -338,399 +339,210 @@ const Tracking = (() => {
     `;
   }
 
-  // ── Leads & Responses ──────────────────────────────────────────────
+  // ── Email Summary (date range + status breakdown) ──────────────────
 
-  async function renderLeadsAndResponses() {
+  async function renderEmailSummary() {
     const wrap = document.getElementById("trackingTabContent");
-    wrap.innerHTML = `<div class="state-message"><div class="spinner"></div><p>Loading leads &amp; responses...</p></div>`;
+    wrap.innerHTML = `
+      <div class="panel" style="margin-bottom:16px">
+        <div class="panel-header">
+          <h2>Filter Sent Emails by Date</h2>
+        </div>
+        <div class="panel-body">
+          <div class="form-row summary-filters">
+            <div class="form-group">
+              <label>From Date</label>
+              <input type="date" id="summaryStartDate" value="${escapeHtml(summaryFilters.startDate)}">
+            </div>
+            <div class="form-group">
+              <label>To Date</label>
+              <input type="date" id="summaryEndDate" value="${escapeHtml(summaryFilters.endDate)}">
+            </div>
+            <div class="form-group summary-filter-actions">
+              <button class="btn btn-primary" id="summaryApplyBtn">Apply</button>
+              <button class="btn btn-secondary" id="summaryResetBtn">All Time</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div id="summaryContent">
+        <div class="state-message"><div class="spinner"></div><p>Loading email summary...</p></div>
+      </div>
+    `;
+
+    document.getElementById("summaryApplyBtn").addEventListener("click", applySummaryFilters);
+    document.getElementById("summaryResetBtn").addEventListener("click", resetSummaryFilters);
+    ["summaryStartDate", "summaryEndDate"].forEach((id) => {
+      document.getElementById(id).addEventListener("keydown", (e) => {
+        if (e.key === "Enter") applySummaryFilters();
+      });
+    });
+
+    await loadEmailSummary();
+  }
+
+  function applySummaryFilters() {
+    const start = document.getElementById("summaryStartDate").value;
+    const end = document.getElementById("summaryEndDate").value;
+
+    if ((start && !end) || (!start && end)) {
+      showToast("Select both a start date and an end date", "error");
+      return;
+    }
+    if (start && end && start > end) {
+      showToast("Start date must be on or before end date", "error");
+      return;
+    }
+
+    summaryFilters = { startDate: start, endDate: end };
+    loadEmailSummary();
+  }
+
+  function resetSummaryFilters() {
+    summaryFilters = { startDate: "", endDate: "" };
+    const startEl = document.getElementById("summaryStartDate");
+    const endEl = document.getElementById("summaryEndDate");
+    if (startEl) startEl.value = "";
+    if (endEl) endEl.value = "";
+    loadEmailSummary();
+  }
+
+  async function loadEmailSummary() {
+    const content = document.getElementById("summaryContent");
+    if (!content) return;
+
+    content.innerHTML = `<div class="state-message"><div class="spinner"></div><p>Loading email summary...</p></div>`;
 
     try {
-      const [responses, leads, stats] = await Promise.all([
-        API.getResponses(),
-        API.getLeads(),
-        API.getLeadsAndResponsesStats(),
-      ]);
-      allResponses = responses || [];
-      allLeads = leads || [];
-      const responseCount = Number(stats.responses) || 0;
-      const leadCount = Number(stats.leads) || 0;
-      const responseRate = Number(stats.responseRate) || 0;
-
-      wrap.innerHTML = `
-        <div class="cards-grid" id="lrStatsCards">
-          <div class="stat-card">
-            <div class="stat-icon green">&#10003;</div>
-            <div class="stat-text">
-              <span class="stat-label">Responses</span>
-              <span class="stat-value">${responseCount}</span>
-            </div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-icon blue">&#9733;</div>
-            <div class="stat-text">
-              <span class="stat-label">Leads</span>
-              <span class="stat-value">${leadCount}</span>
-            </div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-icon cyan">&#128200;</div>
-            <div class="stat-text">
-              <span class="stat-label">Response Rate</span>
-              <span class="stat-value">${responseRate}%</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="panel" style="margin-bottom:16px">
-          <div class="panel-header lr-header">
-            <div class="lr-header-left">
-              <h2 id="lrSectionTitle">Responses (${allResponses.length})</h2>
-              <div class="lr-subtabs" id="lrSubtabs">
-                <button class="lr-subtab active" data-subtab="responses">Responses</button>
-                <button class="lr-subtab" data-subtab="leads">Leads</button>
-              </div>
-            </div>
-            <div class="lr-header-actions" id="lrHeaderActions">
-            </div>
-          </div>
-          <div id="lrContent"></div>
-        </div>
-
-        <div id="lrLeadFormWrap"></div>
-      `;
-
-      document.querySelectorAll("#lrSubtabs .lr-subtab").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          document.querySelectorAll("#lrSubtabs .lr-subtab").forEach((x) => x.classList.remove("active"));
-          btn.classList.add("active");
-          leadsAndResponsesSubTab = btn.dataset.subtab;
-          renderLeadsAndResponsesContent();
-        });
-      });
-
-      renderLeadsAndResponsesContent();
+      emailSummary = await API.getEmailSummary(summaryFilters.startDate, summaryFilters.endDate);
+      renderSummaryContent();
     } catch (err) {
-      wrap.innerHTML = `
+      content.innerHTML = `
         <div class="panel"><div class="panel-body">
           <div class="state-message error-state">
             <div class="state-icon">&#9888;</div>
-            <p>Failed to load leads &amp; responses: ${escapeHtml(err.message)}</p>
+            <p>Failed to load email summary: ${escapeHtml(err.message)}</p>
           </div>
         </div></div>
       `;
     }
   }
 
-  function renderLeadsAndResponsesContent() {
-    if (leadsAndResponsesSubTab === "responses") renderResponsesTab();
-    else renderLeadsTab();
-  }
+  function renderSummaryContent() {
+    const content = document.getElementById("summaryContent");
+    if (!content) return;
 
-  function updateLrStatsCards(stats) {
-    const cards = document.getElementById("lrStatsCards");
-    if (!cards) return;
-    const values = cards.querySelectorAll(".stat-value");
-    if (values.length < 3) return;
-    values[0].textContent = Number(stats.responses) || 0;
-    values[1].textContent = Number(stats.leads) || 0;
-    values[2].textContent = (Number(stats.responseRate) || 0) + "%";
-  }
+    const summary = emailSummary || {};
+    const total = Number(summary.total) || 0;
+    const counts = Array.isArray(summary.statusCounts) ? summary.statusCounts : [];
+    const successful = Number(summary.successful) || 0;
+    const failed = Number(summary.failed) || 0;
+    const successRate = total > 0 ? Math.round((successful * 100) / total) : 0;
+    const rangeLabel = summaryFilters.startDate && summaryFilters.endDate
+      ? `${formatDate(summaryFilters.startDate)} \u2013 ${formatDate(summaryFilters.endDate)}`
+      : "All time";
 
-  function renderResponsesTab() {
-    const contentWrap = document.getElementById("lrContent");
-    const titleEl = document.getElementById("lrSectionTitle");
-    const actionsEl = document.getElementById("lrHeaderActions");
-
-    if (titleEl) titleEl.textContent = `Responses (${allResponses.length})`;
-    if (actionsEl) {
-      actionsEl.innerHTML = `
-        <button class="btn btn-secondary" id="checkRepliesBtn">&#128270; Check for Replies</button>
-        <button class="btn btn-secondary" id="refreshResponsesBtn">&#8635; Refresh</button>
-      `;
-      document.getElementById("checkRepliesBtn").addEventListener("click", checkForReplies);
-      document.getElementById("refreshResponsesBtn").addEventListener("click", renderLeadsAndResponses);
-    }
-
-    if (allResponses.length === 0) {
-      contentWrap.innerHTML = `
-        <div class="panel-body">
-          <div class="state-message">
-            <div class="state-icon">&#128172;</div>
-            <p>No responses detected yet. Buyer replies to campaign emails will appear here automatically.<br>
-            You can also click &quot;Check for Replies&quot; to scan your inbox manually.</p>
+    const cards = `
+      <div class="cards-grid" id="summaryStats">
+        <div class="stat-card">
+          <div class="stat-icon cyan">&#9993;</div>
+          <div class="stat-text">
+            <span class="stat-label">Total Emails</span>
+            <span class="stat-value">${total}</span>
           </div>
         </div>
-      `;
-      return;
-    }
-
-    let rows = allResponses.map((r) => `
-      <tr>
-        <td>${escapeHtml(r.buyerName || "-")}</td>
-        <td>${escapeHtml(r.companyName || "-")}</td>
-        <td>${escapeHtml(r.email || "-")}</td>
-        <td>${r.campaignId ? '<a href="#campaigns" class="campaign-link">Campaign #' + escapeHtml(String(r.campaignId)) + '</a>' : "-"}</td>
-        <td>${formatDateTime(r.responseDate)}</td>
-        <td>${badge(r.responseType || "REPLY")}</td>
-        <td class="lr-subject-cell">${escapeHtml(r.subject || "-")}</td>
-      </tr>
-    `).join("");
-
-    contentWrap.innerHTML = `
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Buyer</th>
-              <th>Company</th>
-              <th>Email</th>
-              <th>Campaign</th>
-              <th>Date</th>
-              <th>Status</th>
-              <th>Subject</th>
-            </tr>
-          </thead>
-          <tbody>${rows}</tbody>
-        </table>
-      </div>
-    `;
-  }
-
-  function renderLeadsTab() {
-    const contentWrap = document.getElementById("lrContent");
-    const titleEl = document.getElementById("lrSectionTitle");
-    const actionsEl = document.getElementById("lrHeaderActions");
-
-    if (titleEl) titleEl.textContent = `Leads (${allLeads.length})`;
-    if (actionsEl) {
-      actionsEl.innerHTML = `
-        <button class="btn btn-primary" id="addLeadBtn">&#10010; Add Lead</button>
-        <button class="btn btn-secondary" id="refreshLeadsBtn">&#8635; Refresh</button>
-      `;
-      document.getElementById("addLeadBtn").addEventListener("click", showAddLeadForm);
-      document.getElementById("refreshLeadsBtn").addEventListener("click", renderLeadsAndResponses);
-    }
-
-    if (allLeads.length === 0) {
-      contentWrap.innerHTML = `
-        <div class="panel-body">
-          <div class="state-message">
-            <div class="state-icon">&#128200;</div>
-            <p>No leads added yet. Click &quot;&#10010; Add Lead&quot; to manually add an interested buyer as a lead.</p>
+        <div class="stat-card">
+          <div class="stat-icon green">&#10003;</div>
+          <div class="stat-text">
+            <span class="stat-label">Sent</span>
+            <span class="stat-value">${successful}</span>
           </div>
         </div>
-      `;
-      return;
-    }
-
-    let rows = allLeads.map((l) => `
-      <tr>
-        <td>${escapeHtml(l.buyerName || "-")}</td>
-        <td>${escapeHtml(l.companyName || "-")}</td>
-        <td>${escapeHtml(l.email || "-")}</td>
-        <td>${badge(l.leadStatus)}</td>
-        <td class="lr-notes-cell">${escapeHtml(l.notes || "-")}</td>
-        <td>${formatDateTime(l.createdAt)}</td>
-        <td class="row-actions">
-          <button class="btn-icon btn-delete-icon btn-delete-lead" data-id="${l.id}" title="Delete lead">&#10005;</button>
-        </td>
-      </tr>
-    `).join("");
-
-    contentWrap.innerHTML = `
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Buyer Name</th>
-              <th>Company</th>
-              <th>Email</th>
-              <th>Status</th>
-              <th>Notes</th>
-              <th>Added</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>${rows}</tbody>
-        </table>
+        <div class="stat-card">
+          <div class="stat-icon amber">&#9888;</div>
+          <div class="stat-text">
+            <span class="stat-label">Failed</span>
+            <span class="stat-value">${failed}</span>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon blue">&#128200;</div>
+          <div class="stat-text">
+            <span class="stat-label">Success Rate</span>
+            <span class="stat-value">${successRate}%</span>
+          </div>
+        </div>
       </div>
     `;
 
-    contentWrap.querySelectorAll(".btn-delete-lead").forEach((btn) => {
-      btn.addEventListener("click", () => deleteLead(parseInt(btn.dataset.id)));
-    });
-  }
-
-  async function checkForReplies() {
-    const btn = document.getElementById("checkRepliesBtn");
-    if (btn) {
-      btn.disabled = true;
-      btn.textContent = "Checking...";
-    }
-    try {
-      const result = await API.checkForReplies();
-      if (result && result.imapEnabled === false) {
-        showToast("IMAP reply detection is not configured. Enable it in application.properties.", "error");
-      } else if (result && result.detected !== undefined) {
-        showToast(result.message || "Reply check completed", "success");
-        if (result.detected > 0) {
-          await refreshResponsesAndLeads();
-        }
-      }
-    } catch (err) {
-      showToast("Reply check failed: " + err.message, "error");
-    } finally {
-      if (btn) {
-        btn.disabled = false;
-        btn.innerHTML = "&#128270; Check for Replies";
-      }
-    }
-  }
-
-  async function refreshResponsesAndLeads() {
-    try {
-      const [responses, leads, stats] = await Promise.all([
-        API.getResponses(),
-        API.getLeads(),
-        API.getLeadsAndResponsesStats(),
-      ]);
-      allResponses = responses || [];
-      allLeads = leads || [];
-      updateLrStatsCards(stats || {});
-      renderLeadsAndResponsesContent();
-    } catch (_) {}
-  }
-
-  function showAddLeadForm() {
-    const formWrap = document.getElementById("lrLeadFormWrap");
-    if (!formWrap) return;
-
-    if (formWrap.innerHTML.trim()) {
-      formWrap.innerHTML = "";
+    if (total === 0) {
+      content.innerHTML = cards + `
+        <div class="panel"><div class="panel-body">
+          <div class="state-message">
+            <div class="state-icon">&#128202;</div>
+            <p>No emails recorded for ${escapeHtml(rangeLabel)}. Send a campaign or widen the date range.</p>
+          </div>
+        </div></div>
+      `;
       return;
     }
 
-    formWrap.innerHTML = `
-      <div class="panel" style="margin-top:16px">
+    const legend = counts.map((c) => {
+      const count = Number(c.count) || 0;
+      const pct = Number(c.percentage) || 0;
+      return `<li class="legend-item">
+        <span class="legend-dot" style="background:${statusColor(c.status)}"></span>
+        <span class="legend-label">${escapeHtml(c.status)}</span>
+        <span class="legend-value">${count} <span class="legend-pct">(${pct}%)</span></span>
+      </li>`;
+    }).join("");
+
+    content.innerHTML = cards + `
+      <div class="panel">
         <div class="panel-header">
-          <h2>Add New Lead</h2>
-          <button class="btn btn-secondary" id="closeLeadFormBtn">&#10005; Close</button>
+          <h2>Status Breakdown \u2014 ${escapeHtml(rangeLabel)}</h2>
         </div>
         <div class="panel-body">
-          <form id="addLeadForm" novalidate>
-            <div class="form-row">
-              <div class="form-group">
-                <label>Buyer Name <span class="required">*</span></label>
-                <input type="text" id="lead-buyerName" placeholder="e.g. John Smith">
-                <span class="error-msg" id="err-lead-buyerName"></span>
-              </div>
-              <div class="form-group">
-                <label>Company Name</label>
-                <input type="text" id="lead-companyName" placeholder="e.g. Global Imports Ltd.">
-              </div>
-            </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label>Email</label>
-                <input type="email" id="lead-email" placeholder="e.g. john@company.com">
-                <span class="error-msg" id="err-lead-email"></span>
-              </div>
-              <div class="form-group">
-                <label>Lead Status</label>
-                <select id="lead-status">
-                  <option value="NEW">New</option>
-                  <option value="INTERESTED">Interested</option>
-                  <option value="QUALIFIED">Qualified</option>
-                  <option value="HOT">Hot</option>
-                  <option value="WARM">Warm</option>
-                  <option value="COLD">Cold</option>
-                  <option value="CONVERTED">Converted</option>
-                  <option value="LOST">Lost</option>
-                </select>
-              </div>
-            </div>
-            <div class="form-row single">
-              <div class="form-group">
-                <label>Notes</label>
-                <textarea id="lead-notes" rows="3" placeholder="Add any notes about this lead..."></textarea>
-              </div>
-            </div>
-            <div class="form-actions">
-              <button type="button" class="btn btn-secondary" id="cancelLeadBtn">Cancel</button>
-              <button type="submit" class="btn btn-primary" id="submitLeadBtn">&#10010; Add Lead</button>
-            </div>
-          </form>
+          <div class="donut-wrap">
+            ${donutChart(counts, total)}
+            <ul class="donut-legend">${legend}</ul>
+          </div>
         </div>
       </div>
     `;
-
-    document.getElementById("closeLeadFormBtn").addEventListener("click", () => { formWrap.innerHTML = ""; });
-    document.getElementById("cancelLeadBtn").addEventListener("click", () => { formWrap.innerHTML = ""; });
-    document.getElementById("addLeadForm").addEventListener("submit", submitLead);
   }
 
-  async function submitLead(e) {
-    e.preventDefault();
-    const nameInput = document.getElementById("lead-buyerName");
-    const emailInput = document.getElementById("lead-email");
-    const nameErr = document.getElementById("err-lead-buyerName");
-    const emailErr = document.getElementById("err-lead-email");
+  function donutChart(counts, total) {
+    let start = 0;
+    const segments = counts.map((c) => {
+      const count = Number(c.count) || 0;
+      const end = start + (total > 0 ? (count * 100) / total : 0);
+      const segment = `${statusColor(c.status)} ${start.toFixed(2)}% ${end.toFixed(2)}%`;
+      start = end;
+      return segment;
+    });
 
-    nameErr.textContent = "";
-    nameErr.style.display = "none";
-    emailErr.textContent = "";
-    emailErr.style.display = "none";
-    nameInput.classList.remove("error");
-    emailInput.classList.remove("error");
-
-    const buyerName = nameInput.value.trim();
-    if (!buyerName) {
-      nameErr.textContent = "Buyer name is required";
-      nameErr.style.display = "block";
-      nameInput.classList.add("error");
-      return;
-    }
-
-    const email = emailInput.value.trim();
-    if (email && !/^[A-Za-z0-9+_.\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$/.test(email)) {
-      emailErr.textContent = "Enter a valid email address";
-      emailErr.style.display = "block";
-      emailInput.classList.add("error");
-      return;
-    }
-
-    const btn = document.getElementById("submitLeadBtn");
-    btn.disabled = true;
-    btn.textContent = "Saving...";
-
-    try {
-      await API.addLead({
-        buyerName,
-        companyName: document.getElementById("lead-companyName").value.trim(),
-        email,
-        notes: document.getElementById("lead-notes").value.trim(),
-        leadStatus: document.getElementById("lead-status").value,
-      });
-      showToast("Lead added successfully", "success");
-      document.getElementById("lrLeadFormWrap").innerHTML = "";
-      await refreshResponsesAndLeads();
-    } catch (err) {
-      showToast("Failed to add lead: " + err.message, "error");
-    } finally {
-      btn.disabled = false;
-      btn.innerHTML = "&#10010; Add Lead";
-    }
+    return `
+      <div class="donut-chart" style="background: conic-gradient(${segments.join(", ")})">
+        <div class="donut-hole">
+          <span class="donut-total">${total}</span>
+          <span class="donut-caption">Emails</span>
+        </div>
+      </div>
+    `;
   }
 
-  async function deleteLead(id) {
-    if (!confirm("Delete this lead?")) return;
-    try {
-      await API.deleteLead(id);
-      showToast("Lead deleted", "success");
-      await refreshResponsesAndLeads();
-    } catch (err) {
-      showToast("Failed to delete lead: " + err.message, "error");
+  function statusColor(status) {
+    const value = String(status || "").toUpperCase();
+    if (value === "SENT") return "var(--color-success)";
+    if (value === "FAILED") return "var(--color-danger)";
+    if (value === "PENDING") return "var(--color-warning)";
+    if (value === "SKIPPED") return "#eab308";
+    let hash = 0;
+    for (let i = 0; i < value.length; i++) {
+      hash = (hash * 31 + value.charCodeAt(i)) % 997;
     }
+    return STATUS_COLOR_PALETTE[hash % STATUS_COLOR_PALETTE.length];
   }
 
   return { render };

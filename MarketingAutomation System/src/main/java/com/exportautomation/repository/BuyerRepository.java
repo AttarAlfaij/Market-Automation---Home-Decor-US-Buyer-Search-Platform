@@ -20,13 +20,16 @@ public interface BuyerRepository extends JpaRepository<Buyer, Long> {
     boolean existsByEmailIgnoreCaseAndIdNot(String email, Long id);
 
     @Query("SELECT b FROM Buyer b WHERE " +
-           "LOWER(b.buyerName) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
-           "LOWER(b.companyName) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
-           "LOWER(b.email) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
-           "LOWER(b.country) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
-           "LOWER(b.productName) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
-           "LOWER(b.sourcePlatform) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
-           "LOWER(b.businessType) LIKE LOWER(CONCAT('%', :keyword, '%'))")
+            "LOWER(b.buyerName) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
+            "LOWER(b.companyName) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
+            "LOWER(b.email) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
+            "LOWER(b.country) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
+            "LOWER(b.state) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
+            "LOWER(b.city) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
+            "LOWER(b.location) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
+            "LOWER(b.productName) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
+            "LOWER(b.sourcePlatform) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
+            "LOWER(b.businessType) LIKE LOWER(CONCAT('%', :keyword, '%'))")
     List<Buyer> searchByKeyword(@Param("keyword") String keyword);
 
     List<Buyer> findByCountryIgnoreCase(String country);
@@ -47,6 +50,9 @@ public interface BuyerRepository extends JpaRepository<Buyer, Long> {
 
     @Query("SELECT b.website FROM Buyer b WHERE b.website IS NOT NULL")
     Set<String> findAllWebsiteValues();
+
+    @Query("SELECT b.email FROM Buyer b WHERE b.email IS NOT NULL")
+    Set<String> findAllEmailValues();
 
     @Query("SELECT b.website FROM Buyer b WHERE b.website LIKE '%linkedin.com%' OR b.website LIKE '%facebook.com%'")
     Set<String> findSocialWebsiteValues();

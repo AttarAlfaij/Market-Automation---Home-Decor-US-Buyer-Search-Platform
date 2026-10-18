@@ -7,12 +7,15 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Repository
 public interface EmailLogRepository extends JpaRepository<EmailLog, Long> {
 
     boolean existsByBuyerIdAndCampaignIdAndStatus(Long buyerId, Long campaignId, String status);
+
+    boolean existsByBuyerIdAndStatus(Long buyerId, String status);
 
     @Query("SELECT COUNT(e) FROM EmailLog e WHERE e.campaignId = :campaignId AND e.status = 'SENT'")
     long countSentByCampaignId(@Param("campaignId") Long campaignId);
@@ -31,7 +34,27 @@ public interface EmailLogRepository extends JpaRepository<EmailLog, Long> {
 
     long countByStatus(String status);
 
+    @Query("SELECT COUNT(e) FROM EmailLog e WHERE e.sentAt >= :start AND e.sentAt < :end AND e.status = :status")
+    long countSentAtBetweenAndStatus(@Param("start") LocalDateTime start,
+                                     @Param("end") LocalDateTime end,
+                                     @Param("status") String status);
+
+    @Query("SELECT e.status AS status, COUNT(e) AS cnt FROM EmailLog e GROUP BY e.status ORDER BY cnt DESC")
+    List<StatusCountRow> countGroupedByStatus();
+
+    @Query("SELECT e.status AS status, COUNT(e) AS cnt FROM EmailLog e "
+           + "WHERE e.sentAt >= :start AND e.sentAt < :end "
+           + "GROUP BY e.status ORDER BY cnt DESC")
+    List<StatusCountRow> countGroupedByStatusBetween(@Param("start") LocalDateTime start,
+                                                     @Param("end") LocalDateTime end);
+
     @Modifying
     @Query("DELETE FROM EmailLog e WHERE e.campaignId = :campaignId")
     void deleteByCampaignId(@Param("campaignId") Long campaignId);
+
+    /** Row of the grouped status-count queries above (status -> number of email logs). */
+    interface StatusCountRow {
+        String getStatus();
+        long getCnt();
+    }
 }

@@ -44,7 +44,7 @@ const Buyers = (() => {
         <div class="panel-header">
           <h2>All Buyers</h2>
           <div class="search-box">
-            <input type="text" id="buyerSearch" placeholder="Search name, company, email, country..." />
+            <input type="text" id="buyerSearch" placeholder="Search name, company, email, country, city, state..." />
           </div>
         </div>
         <div id="buyerTableWrap">
@@ -76,7 +76,7 @@ const Buyers = (() => {
       filtered = allBuyers;
     } else {
       filtered = allBuyers.filter((b) =>
-        [b.buyerName, b.companyName, b.email, b.country, b.sourcePlatform, b.productName, b.classification]
+        [b.buyerName, b.companyName, b.email, b.country, b.city, b.state, b.location, b.sourcePlatform, b.productName, b.classification]
           .filter(Boolean)
           .some((v) => v.toLowerCase().includes(q))
       );
@@ -111,6 +111,8 @@ const Buyers = (() => {
               <th>Company</th>
               <th>Email</th>
               <th>Country</th>
+              <th>City</th>
+              <th>State</th>
               <th>Source</th>
               <th>Product</th>
               <th>Classification</th>
@@ -125,6 +127,8 @@ const Buyers = (() => {
                 <td>${escapeHtml(b.companyName)}</td>
                 <td>${escapeHtml(b.email)}</td>
                 <td>${escapeHtml(b.country || "-")}</td>
+                <td>${escapeHtml(b.city || "-")}</td>
+                <td>${escapeHtml(b.state || "-")}</td>
                 <td>${escapeHtml(b.sourcePlatform || "-")}</td>
                 <td>${escapeHtml(b.productName || "-")}</td>
                 <td>${badge(b.classification)}</td>
