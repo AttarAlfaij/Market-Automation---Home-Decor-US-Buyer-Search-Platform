@@ -1,0 +1,23 @@
+
+# Configuration files containing secrets
+src/main/resources/application.properties
+
+# Build output
+target/
+build/
+
+# IDE files
+.idea/
+*.iml
+.vscode/
+
+# Environment variables
+.env
+.env.*
+
+# Logs
+*.log
+
+# Operating system files
+.DS_Store
+Thumbs.db
