@@ -245,7 +245,9 @@ const Campaigns = (() => {
             </div>
             <div class="detail-section">
               <h3>Attachment</h3>
-              <div class="detail-row"><span class="detail-label">File</span><span class="detail-value">${c.attachmentName ? escapeHtml(c.attachmentName) : "No attachment"}</span></div>
+              <div class="detail-row"><span class="detail-label">File</span><span class="detail-value">${c.attachmentName
+                ? escapeHtml(c.attachmentName) + ' <button class="btn btn-danger btn-sm" id="detailRemoveAttachmentBtn" title="Remove attachment" style="margin-left:8px;vertical-align:middle;">&#128465; Remove</button>'
+                : "No attachment"}</span></div>
             </div>
             <div class="detail-section">
               <h3>Metadata</h3>
@@ -286,6 +288,12 @@ const Campaigns = (() => {
     if (bodyFrame) bodyFrame.srcdoc = `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:0;background:#ffffff;">${currentCampaign.emailBody}</body></html>`;
     document.getElementById("detailEditBtn").addEventListener("click", () => startEdit(c.id));
     document.getElementById("detailDeleteBtn").addEventListener("click", () => deleteCampaign(c.id));
+    const detailRemoveAttachmentBtn = document.getElementById("detailRemoveAttachmentBtn");
+    if (detailRemoveAttachmentBtn) {
+      detailRemoveAttachmentBtn.addEventListener("click", () =>
+        removeCampaignAttachment(currentCampaign, () => renderDetail(currentCampaign))
+      );
+    }
     document.getElementById("detailSendBtn").addEventListener("click", () => sendCampaignFromFrontend());
     document.getElementById("addRecipientBtn").addEventListener("click", () => toggleAddRecipientForm());
     document.getElementById("removeSentBtn").addEventListener("click", () => removeSentBuyers());
@@ -1185,8 +1193,12 @@ const Campaigns = (() => {
                     <input type="file" id="f-file" accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.jpg,.jpeg,.png">
                     <div class="file-upload-icon">&#128206;</div>
                     <div class="file-upload-text">Click to upload or drag and drop<br>PDF, DOC, PPT, XLS, JPG, PNG (max 10 MB)</div>
-                    <div class="file-upload-name" id="f-fileName">${prefill && prefill.attachmentName ? escapeHtml(prefill.attachmentName) : ""}</div>
+                    <div class="file-upload-name" id="f-fileName" style="${prefill && prefill.attachmentName ? "display:block" : ""}">${prefill && prefill.attachmentName ? "Current: " + escapeHtml(prefill.attachmentName) : ""}</div>
                   </div>
+                  ${editingId && prefill && prefill.attachmentName ? `
+                  <div id="existingAttachmentWrap" style="margin-top:10px;">
+                    <button type="button" class="btn btn-danger btn-sm" id="removeAttachmentBtn">&#128465; Remove Attachment</button>
+                  </div>` : ""}
                 </div>
               </div>
             </div>
@@ -1211,6 +1223,21 @@ const Campaigns = (() => {
       el.textContent = name;
       el.style.display = name ? "block" : "none";
     });
+
+    const removeAttachmentBtn = document.getElementById("removeAttachmentBtn");
+    if (removeAttachmentBtn) {
+      removeAttachmentBtn.addEventListener("click", () => {
+        removeCampaignAttachment(prefill, () => {
+          const nameEl = document.getElementById("f-fileName");
+          if (nameEl) {
+            nameEl.textContent = "";
+            nameEl.style.display = "none";
+          }
+          const wrap = document.getElementById("existingAttachmentWrap");
+          if (wrap) wrap.remove();
+        });
+      });
+    }
 
     initBodyEditor(prefill && prefill.emailBody ? prefill.emailBody : "");
 
@@ -1517,6 +1544,29 @@ const Campaigns = (() => {
     } finally {
       btn.disabled = false;
       btn.textContent = editingId ? "Update Campaign" : "Save Campaign";
+    }
+  }
+
+  async function removeCampaignAttachment(campaign, onRemoved) {
+    if (!campaign || !campaign.attachmentName) return;
+    if (!confirm(`Remove attachment "${campaign.attachmentName}" from this campaign?`)) return;
+
+    try {
+      const result = await API.removeCampaignAttachment(campaign.id);
+      const updated = result && result.data ? result.data : result;
+      campaign.attachmentName = updated && updated.attachmentName != null ? updated.attachmentName : null;
+      campaign.attachmentPath = updated && updated.attachmentPath != null ? updated.attachmentPath : null;
+
+      const cached = allCampaigns.find((x) => x.id === campaign.id);
+      if (cached) {
+        cached.attachmentName = campaign.attachmentName;
+        cached.attachmentPath = campaign.attachmentPath;
+      }
+
+      showToast("Attachment removed successfully", "success");
+      if (onRemoved) onRemoved();
+    } catch (err) {
+      showToast("Error removing attachment: " + err.message, "error");
     }
   }
 

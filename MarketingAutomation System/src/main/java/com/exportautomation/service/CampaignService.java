@@ -89,6 +89,16 @@ public class CampaignService {
         return saved;
     }
 
+    public Campaign removeAttachment(Long id) {
+        Campaign existing = getCampaignById(id);
+        deleteExistingFile(existing.getAttachmentPath());
+        existing.setAttachmentName(null);
+        existing.setAttachmentPath(null);
+        Campaign saved = campaignRepository.save(existing);
+        logger.info("Attachment removed from campaign with id: {}", id);
+        return saved;
+    }
+
     @Transactional
     public void deleteCampaign(Long id) {
         Campaign existing = getCampaignById(id);

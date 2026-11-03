@@ -52,6 +52,7 @@ const API = (() => {
     createCampaign: (formData) => mutate("/api/campaigns", "POST", formData),
     updateCampaign: (id, formData) => mutate(`/api/campaigns/${id}`, "PUT", formData),
     deleteCampaign: (id) => mutate(`/api/campaigns/${id}`, "DELETE"),
+    removeCampaignAttachment: (id) => mutate(`/api/campaigns/${id}/attachment`, "DELETE"),
     getCampaignRecipients: (id) => request(`/api/campaigns/${id}/recipients`),
     updateRecipientEmail: (campaignId, buyerId, email) =>
       mutate(`/api/campaigns/${campaignId}/recipients/${buyerId}`, "PUT", { email }),

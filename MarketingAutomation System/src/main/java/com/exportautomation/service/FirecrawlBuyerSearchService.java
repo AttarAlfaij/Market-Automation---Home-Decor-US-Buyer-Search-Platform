@@ -893,9 +893,22 @@ public class FirecrawlBuyerSearchService {
     // buyer of a physical product, so the engine is told not to return them in
     // the first place - the Canada search spends its whole result budget on
     // actual product businesses. A USA search sends the unchanged shared list.
+    // Firecrawl folds every excludeDomains entry into a "-site:<domain>" query
+    // operator. Once that internal query grows past roughly 2 KB the engine
+    // SILENTLY returns an empty result set (success=true, web=[], creditsUsed=0)
+    // instead of an error - so the 79 shared non-business hosts plus all 51
+    // Canada-only hosts made EVERY Canada search return zero buyers while a USA
+    // search (shared hosts only) stayed under the limit and worked. Canada
+    // exclusions are therefore added only while the expanded query stays inside
+    // this safe budget; any leftover host is still screened locally by
+    // canadaStrictContentReason, so no buyer quality is lost.
+    private static final int MAX_FIRECRAWL_EXPANDED_QUERY_CHARS = 1900;
+    // Length of the operator Firecrawl appends per excluded host (" -site:").
+    private static final int FIRECRAWL_SITE_OPERATOR_CHARS = 7;
+
     private static final Set<String> CANADA_EXCLUDED_DOMAINS = Set.of(
             // federal government / public bodies
-            "canada.ca", "gc.ca", "gouv.qc.ca", "quebec.ca", "statcan.gc",
+            "canada.ca", "gc.ca", "gouv.qc.ca", "quebec.ca", "statcan.gc.ca",
             // provincial & territorial government / health authorities
             "health.gov.on.ca", "ontariohealth.ca", "ontariohealth.gov.on.ca",
             "healthpei.ca", "albertahealthservices.ca",
@@ -903,7 +916,7 @@ public class FirecrawlBuyerSearchService {
             "gov.nl.ca", "sante.gouv.qc.ca",
             // national hospitals / health networks
             "sickkids.ca", "shrinerhospital.ca", "hopitalpierreboucher.ca",
-            "hopitalgeneral.ca", "cliniquequebec",
+            "hopitalgeneral.ca", "cliniquequebec.ca",
             "polycliniquedelomedecin.ca",
             // news wires / papers / broadcasters
             "newswire.ca", "newsfilecorp.com", "prnewswire.com",
@@ -9875,6 +9888,31 @@ public class FirecrawlBuyerSearchService {
         return normalized;
     }
 
+    // A Firecrawl excludeDomains entry must be a bare hostname: no scheme, no
+    // path and at least one dot (e.g. "example.ca"). Anything else makes the API
+    // reject the entire search request with HTTP 400.
+    private static boolean isValidExcludeDomain(String domain) {
+        if (domain == null || domain.isBlank()) {
+            return false;
+        }
+        String host = domain.trim();
+        if (host.contains("://") || host.contains("/") || host.contains("\\")
+                || host.contains(" ")) {
+            return false;
+        }
+        String[] labels = host.split("\\.");
+        if (labels.length < 2) {
+            return false;
+        }
+        for (String label : labels) {
+            if (label.isEmpty()
+                    || !label.matches("[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?")) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     private List<BuyerSearchResult> executeSearch(String query, String businessType,
                                                    String apiKey, int limit,
                                                    String location, SearchBudget budget,
@@ -9927,7 +9965,27 @@ public class FirecrawlBuyerSearchService {
             // news wires / papers and file hosts are never buyers of a physical
             // product, so they are excluded at the API level. A USA search sends
             // the unchanged NON_BUSINESS_HOSTS list.
-            excludeDomains.addAll(CANADA_EXCLUDED_DOMAINS);
+            // Firecrawl rejects the WHOLE request if any excludeDomains entry
+            // is not a bare hostname (no protocol/path, must have a dot), so
+            // only well-formed hosts are added. The shared non-business hosts
+            // already occupy most of the safe budget; the Canada-only hosts are
+            // added only while the internal "-site:" query still fits, because
+            // exceeding it makes Firecrawl return zero results with no error.
+            int expandedQueryChars = query.length();
+            for (String domain : excludeDomains) {
+                expandedQueryChars += FIRECRAWL_SITE_OPERATOR_CHARS + domain.length();
+            }
+            for (String domain : CANADA_EXCLUDED_DOMAINS) {
+                if (!isValidExcludeDomain(domain) || excludeDomains.contains(domain)) {
+                    continue;
+                }
+                int addedChars = FIRECRAWL_SITE_OPERATOR_CHARS + domain.length();
+                if (expandedQueryChars + addedChars > MAX_FIRECRAWL_EXPANDED_QUERY_CHARS) {
+                    continue;
+                }
+                excludeDomains.add(domain);
+                expandedQueryChars += addedChars;
+            }
         }
         requestBody.put("excludeDomains", excludeDomains);
         requestBody.put("ignoreInvalidURLs", true);

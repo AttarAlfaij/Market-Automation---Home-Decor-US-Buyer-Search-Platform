@@ -78,6 +78,12 @@ public class CampaignController {
         return ResponseEntity.ok(ApiResponse.success("Campaign deleted successfully", null));
     }
 
+    @DeleteMapping("/{id}/attachment")
+    public ResponseEntity<ApiResponse> removeCampaignAttachment(@PathVariable Long id) {
+        Campaign updated = campaignService.removeAttachment(id);
+        return ResponseEntity.ok(ApiResponse.success("Attachment removed successfully", updated));
+    }
+
     @PostMapping("/{campaignId}/send/{buyerId}")
     public ResponseEntity<ApiResponse> sendEmail(
             @PathVariable Long campaignId,
